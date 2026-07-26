@@ -15,33 +15,34 @@
 
 extern "C" {
 #include "parentlink.h"
+#include "i18n.h"
+}
+
+static QString tr_(const char *key)
+{
+    return QString::fromUtf8(i18n_t(key));
 }
 
 ParentLinkDialog::ParentLinkDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Được giám sát bởi...");
+    setWindowTitle(tr_("plink.title"));
     setMinimumWidth(520);
 
-    auto *note = new QLabel(
-        "The list below shows ALL parent accounts that are requesting or have permission "
-        "to view activity on this device, including any pending invites. "
-        "You can revoke access at any time.",
-        this
-    );
+    auto *note = new QLabel(tr_("plink.note"), this);
     note->setWordWrap(true);
     note->setStyleSheet("color: #7e9ac0; font-size: 11px;");
 
     m_table = new QTableWidget(this);
     m_table->setColumnCount(2);
-    m_table->setHorizontalHeaderLabels({"Parent's email", "Status"});
+    m_table->setHorizontalHeaderLabels({tr_("plink.col_email"), tr_("plink.col_status")});
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-    auto *approveBtn = new QPushButton("Approve", this);
-    auto *revokeBtn  = new QPushButton("Revoke", this);
-    auto *closeBtn   = new QPushButton("Close", this);
+    auto *approveBtn = new QPushButton(tr_("plink.approve_btn"), this);
+    auto *revokeBtn  = new QPushButton(tr_("plink.revoke_btn"), this);
+    auto *closeBtn   = new QPushButton(tr_("plink.close_btn"), this);
 
     connect(approveBtn, &QPushButton::clicked, this, &ParentLinkDialog::onApprove);
     connect(revokeBtn, &QPushButton::clicked, this, &ParentLinkDialog::onRevoke);
@@ -77,11 +78,11 @@ void ParentLinkDialog::refresh()
 
         QString statusText;
         if (strcmp(links[i].status, "pending") == 0)
-            statusText = "Waiting for you to agree";
+            statusText = tr_("plink.status_pending");
         else if (strcmp(links[i].status, "approved") == 0)
-            statusText = "Agreed - being viewed";
+            statusText = tr_("plink.status_approved");
         else
-            statusText = "Revoked";
+            statusText = tr_("plink.status_revoked");
 
         auto *statusItem = new QTableWidgetItem(statusText);
 
@@ -92,7 +93,7 @@ void ParentLinkDialog::refresh()
     if (count == 0)
     {
         m_table->setRowCount(1);
-        auto *emptyItem = new QTableWidgetItem("No parents have linked with this account yet.");
+        auto *emptyItem = new QTableWidgetItem(tr_("plink.empty"));
         emptyItem->setFlags(Qt::NoItemFlags);
         m_table->setItem(0, 0, emptyItem);
         m_table->setSpan(0, 0, 1, 2);
@@ -124,7 +125,7 @@ void ParentLinkDialog::onApprove()
 
     if (id < 0)
     {
-        QMessageBox::information(this, "JustInTime", "Select one row from the list first.");
+        QMessageBox::information(this, "JustInTime", tr_("plink.select_row"));
         return;
     }
 
@@ -132,7 +133,7 @@ void ParentLinkDialog::onApprove()
 
     if (parentlink_approve(id, err, sizeof(err)))
     {
-        QMessageBox::information(this, "JustInTime", "Already agreed to let this parent see the machine's activity.");
+        QMessageBox::information(this, "JustInTime", tr_("plink.approved_msg"));
         refresh();
     }
     else
@@ -147,14 +148,14 @@ void ParentLinkDialog::onRevoke()
 
     if (id < 0)
     {
-        QMessageBox::information(this, "JustInTime", "Select one row from the list first.");
+        QMessageBox::information(this, "JustInTime", tr_("plink.select_row"));
         return;
     }
 
     if (
         QMessageBox::question(
             this, "JustInTime",
-            "Revoke this parent's viewing rights? They won't be able to see the device's activity anymore."
+            tr_("plink.revoke_confirm")
         ) != QMessageBox::Yes
     )
         return;
@@ -163,7 +164,7 @@ void ParentLinkDialog::onRevoke()
 
     if (parentlink_revoke(id, err, sizeof(err)))
     {
-        QMessageBox::information(this, "JustInTime", "Revoked");
+        QMessageBox::information(this, "JustInTime", tr_("plink.revoked_msg"));
         refresh();
     }
     else

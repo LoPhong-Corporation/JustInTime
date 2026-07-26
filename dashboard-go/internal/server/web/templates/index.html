@@ -49,6 +49,10 @@
                     <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 18h6"/><rect x="18" y="8" width="4" height="8" rx="1"/></svg>
                     {{.T.nav_devices}}
                 </a>
+                <a href="/?view=family" class="nav-link sidebar-view-link" data-view="family">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21v-1a6 6 0 0 1 12 0v1"/><path d="M14.5 21v-.7a5 5 0 0 1 7.5-4.3"/></svg>
+                    {{.T.nav_family}}
+                </a>
                 <a href="/settings" class="nav-link" style="margin-top:12px; border-top:1px solid #1c3a5e; padding-top:16px;">
                     <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c.16.5.62.86 1.15 1H21a2 2 0 1 1 0 4h-.09c-.53.14-.99.5-1.15 1z"/></svg>
                     {{.T.nav_settings}}
@@ -348,6 +352,70 @@
         </div>
     </div>
 
+    <!-- ============ FAMILY (new: consent-based parent/child linking + limits) ============ -->
+    <div id="view-family" class="dash-view" style="display:none;">
+
+        <div class="section-title">{{.T.family_invite_title}}</div>
+        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.family_invite_note}}</p>
+        <div id="family-invite-error"></div>
+        <div class="panel" style="margin-bottom:20px;">
+            <form id="invite-form" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <input id="invite-email" type="email" placeholder="{{.T.family_invite_email}}" style="flex:1;min-width:220px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
+                <button type="submit" class="btn">{{.T.family_invite_send}}</button>
+            </form>
+        </div>
+
+        <div class="section-title">{{.T.family_children_title}}</div>
+        <div id="family-children-error"></div>
+        <div class="panel" style="margin-bottom:20px;">
+            <table>
+                <thead><tr><th>Email</th><th></th><th></th></tr></thead>
+                <tbody id="family-children-body"></tbody>
+            </table>
+        </div>
+
+        <div class="section-title">{{.T.family_limits_title}}</div>
+        <div class="panel" style="margin-bottom:20px;">
+            <p id="family-limits-hint" style="color:#7e9ac0; font-size:13px; margin-top:0;">{{.T.family_limits_select}}</p>
+
+            <table style="margin-bottom:16px;">
+                <thead><tr><th>{{.T.family_limit_process}}</th><th>{{.T.today}}</th><th></th></tr></thead>
+                <tbody id="family-limits-body"></tbody>
+            </table>
+
+            <form id="limit-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <input id="limit-process" type="text" placeholder="{{.T.family_limit_process}}" style="flex:1;min-width:180px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
+                <input id="limit-minutes" type="number" min="1" value="60" placeholder="{{.T.family_limit_minutes}}" style="width:110px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
+                <label style="font-size:13px; color:#dce8f7;"><input id="limit-nolimit" type="checkbox"> {{.T.family_limit_nolimit}}</label>
+                <label style="font-size:13px; color:#dce8f7;"><input id="limit-block" type="checkbox"> {{.T.family_limit_block}}</label>
+                <button type="submit" class="btn">{{.T.family_limit_save}}</button>
+            </form>
+        </div>
+
+        <div class="section-title">{{.T.family_today_usage}}</div>
+        <div class="panel" style="margin-bottom:20px;">
+            <canvas id="familyChart"></canvas>
+        </div>
+
+        <div class="section-title">{{.T.family_recent}}</div>
+        <div class="panel" style="margin-bottom:20px;">
+            <table>
+                <thead><tr><th>{{.T.process}}</th><th>{{.T.window_title}}</th><th>{{.T.duration}}</th><th>{{.T.when}}</th></tr></thead>
+                <tbody id="family-recent-body"></tbody>
+            </table>
+        </div>
+
+        <div class="section-title">{{.T.family_parents_title}}</div>
+        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.family_parents_note}}</p>
+        <div id="family-parents-error"></div>
+        <div class="panel">
+            <table>
+                <thead><tr><th>Email</th><th></th><th></th></tr></thead>
+                <tbody id="family-parents-body"></tbody>
+            </table>
+        </div>
+    </div>
+
             </div>
         </div>
     </div>
@@ -368,7 +436,18 @@
             loginRequired: {{json .T.login_required}},
             login: {{json .T.login}},
             noDevices: {{json .T.devices_none}},
-            noMessages: {{json .T.devices_inbox_empty}}
+            noMessages: {{json .T.devices_inbox_empty}},
+            familyNoChildren: {{json .T.family_children_none}},
+            familyNoParents: {{json .T.family_parents_none}},
+            familyNoLimits: {{json .T.family_limits_none}},
+            familySelectChild: {{json .T.family_limits_select}},
+            familyStatusPending: {{json .T.family_status_pending}},
+            familyStatusApproved: {{json .T.family_status_approved}},
+            familyStatusRevoked: {{json .T.family_status_revoked}},
+            familyApprove: {{json .T.family_approve}},
+            familyRevoke: {{json .T.family_revoke}},
+            familyDeleteLimit: {{json .T.family_limit_delete}},
+            familyNoLimitText: {{json .T.family_limit_nolimit}}
         };
     </script>
     <script src="/static/js/dashboard.js"></script>

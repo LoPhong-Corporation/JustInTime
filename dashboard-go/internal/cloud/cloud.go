@@ -369,3 +369,293 @@ func (c *Client) MarkRead(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------------
+// Parent/child linking (see migrations/004_parent_links.sql). This is a
+// consent-based model: a parent invites a child by email, but nothing
+// is visible to the parent until the CHILD explicitly approves — and
+// the child can revoke at any time. The Go dashboard is the primary
+// place both roles manage this (mirrors the native Qt ParentDialog/
+// ParentLinkDialog in the C++ agent, same backend, same rules).
+// ---------------------------------------------------------------------
+
+// ParentLink is a normalized view of a parent_links row, whichever side
+// it was fetched from (see ListLinksAsParent/ListLinksAsChild) —
+// OtherUserID/OtherEmail is the *other* party in the link.
+type ParentLink struct {
+	ID          int64   `json:"id"`
+	OtherUserID string  `json:"other_user_id"`
+	OtherEmail  string  `json:"other_email"`
+	Status      string  `json:"status"` // "pending" | "approved" | "revoked"
+	CreatedAt   string  `json:"created_at"`
+	ApprovedAt  *string `json:"approved_at"`
+}
+
+type parentLinkAsParentRow struct {
+	ID          int64   `json:"id"`
+	ChildUserID string  `json:"child_user_id"`
+	ChildEmail  string  `json:"child_email"`
+	Status      string  `json:"status"`
+	CreatedAt   string  `json:"created_at"`
+	ApprovedAt  *string `json:"approved_at"`
+}
+
+type parentLinkAsChildRow struct {
+	ID           int64   `json:"id"`
+	ParentUserID string  `json:"parent_user_id"`
+	ParentEmail  string  `json:"parent_email"`
+	Status       string  `json:"status"`
+	CreatedAt    string  `json:"created_at"`
+	ApprovedAt   *string `json:"approved_at"`
+}
+
+// InviteChild sends a monitoring invite to child_email. The invite sits
+// as "pending" until the child account approves it — nothing about the
+// child is readable by the parent before that (enforced by RLS, not
+// just by this client).
+func (c *Client) InviteChild(ctx context.Context, childEmail string) error {
+	lookupBody, _ := json.Marshal(map[string]string{"target_email": childEmail})
+
+	resp, err := c.request(ctx, http.MethodPost, "/rest/v1/rpc/find_user_id_by_email", lookupBody, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return readErr(resp)
+	}
+
+	var childID *string
+	if err := json.NewDecoder(resp.Body).Decode(&childID); err != nil {
+		return err
+	}
+	if childID == nil || *childID == "" {
+		return fmt.Errorf("no JustInTime account found for %q — they need to sign up/log in with this exact email first", childEmail)
+	}
+
+	insertBody, _ := json.Marshal(map[string]string{"child_user_id": *childID})
+
+	resp2, err := c.request(ctx, http.MethodPost, "/rest/v1/parent_links", insertBody, map[string]string{
+		"Prefer": "return=minimal",
+	})
+	if err != nil {
+		return err
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
+		return nil
+	}
+	if resp2.StatusCode == http.StatusConflict {
+		return fmt.Errorf("already invited or linked with this account")
+	}
+	return readErr(resp2)
+}
+
+// ListLinksAsParent lists every child link this account has sent (any
+// status), via the parent_links_for_parent() RPC (joins email server-
+// side so the client never touches auth.users directly).
+func (c *Client) ListLinksAsParent(ctx context.Context) ([]ParentLink, error) {
+	resp, err := c.request(ctx, http.MethodPost, "/rest/v1/rpc/parent_links_for_parent", []byte("{}"), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readErr(resp)
+	}
+
+	var raw []parentLinkAsParentRow
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]ParentLink, len(raw))
+	for i, r := range raw {
+		out[i] = ParentLink{
+			ID: r.ID, OtherUserID: r.ChildUserID, OtherEmail: r.ChildEmail,
+			Status: r.Status, CreatedAt: r.CreatedAt, ApprovedAt: r.ApprovedAt,
+		}
+	}
+	return out, nil
+}
+
+// ListLinksAsChild lists every parent who has invited or been approved
+// to view this account (any status) — the transparency view: nothing
+// is ever hidden, including pending invites the child hasn't acted on.
+func (c *Client) ListLinksAsChild(ctx context.Context) ([]ParentLink, error) {
+	resp, err := c.request(ctx, http.MethodPost, "/rest/v1/rpc/parent_links_for_child", []byte("{}"), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readErr(resp)
+	}
+
+	var raw []parentLinkAsChildRow
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]ParentLink, len(raw))
+	for i, r := range raw {
+		out[i] = ParentLink{
+			ID: r.ID, OtherUserID: r.ParentUserID, OtherEmail: r.ParentEmail,
+			Status: r.Status, CreatedAt: r.CreatedAt, ApprovedAt: r.ApprovedAt,
+		}
+	}
+	return out, nil
+}
+
+func (c *Client) updateLinkStatus(ctx context.Context, linkID int64, status string) error {
+	body, _ := json.Marshal(map[string]string{"status": status})
+
+	resp, err := c.request(ctx, http.MethodPatch,
+		fmt.Sprintf("/rest/v1/parent_links?id=eq.%d", linkID),
+		body, map[string]string{"Prefer": "return=minimal"})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return readErr(resp)
+}
+
+// ApproveLink is a child-side action: consent to let a parent view this
+// account's activity.
+func (c *Client) ApproveLink(ctx context.Context, linkID int64) error {
+	return c.updateLinkStatus(ctx, linkID, "approved")
+}
+
+// RevokeLink works from either side: a child stops sharing with a
+// parent, or a parent cancels an invite they sent.
+func (c *Client) RevokeLink(ctx context.Context, linkID int64) error {
+	return c.updateLinkStatus(ctx, linkID, "revoked")
+}
+
+// ---------------------------------------------------------------------
+// App limits (see migrations/004_parent_links.sql). Only ever readable/
+// writable by a parent with an "approved" link to that child — RLS
+// enforces this regardless of what this client sends.
+// ---------------------------------------------------------------------
+
+// AppLimit is a row of public.app_limits. DailyLimitSec is nil for "no
+// time limit" (only meaningful when Blocked is also false).
+type AppLimit struct {
+	ID            int64  `json:"id"`
+	ProcessName   string `json:"process_name"`
+	DailyLimitSec *int   `json:"daily_limit_sec"`
+	Blocked       bool   `json:"blocked"`
+}
+
+// ListLimitsForChild returns every limit set for childUserID (only
+// succeeds if the caller is a parent approved for that child).
+func (c *Client) ListLimitsForChild(ctx context.Context, childUserID string) ([]AppLimit, error) {
+	path := fmt.Sprintf(
+		"/rest/v1/app_limits?select=id,process_name,daily_limit_sec,blocked&child_user_id=eq.%s&order=process_name.asc",
+		url.QueryEscape(childUserID),
+	)
+
+	resp, err := c.request(ctx, http.MethodGet, path, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readErr(resp)
+	}
+
+	var out []AppLimit
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetLimit upserts a limit for 1 app (unique on child_user_id +
+// process_name — calling again for the same app overwrites it).
+// dailyLimitSec == nil means "no time limit".
+func (c *Client) SetLimit(ctx context.Context, childUserID, processName string, dailyLimitSec *int, blocked bool) error {
+	payload := map[string]any{
+		"child_user_id":   childUserID,
+		"process_name":    processName,
+		"daily_limit_sec": nil,
+		"blocked":         blocked,
+	}
+	if dailyLimitSec != nil {
+		payload["daily_limit_sec"] = *dailyLimitSec
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.request(ctx, http.MethodPost,
+		"/rest/v1/app_limits?on_conflict=child_user_id,process_name",
+		body, map[string]string{"Prefer": "resolution=merge-duplicates,return=minimal"})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return readErr(resp)
+}
+
+// DeleteLimit removes a limit entirely (the app becomes unrestricted).
+func (c *Client) DeleteLimit(ctx context.Context, limitID int64) error {
+	resp, err := c.request(ctx, http.MethodDelete,
+		fmt.Sprintf("/rest/v1/app_limits?id=eq.%d", limitID),
+		nil, map[string]string{"Prefer": "return=minimal"})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return readErr(resp)
+}
+
+// ActivityLogsForChild fetches raw activity_logs rows for a specific
+// child (only succeeds for a parent approved for that child — RLS,
+// see migrations/004_parent_links.sql). sinceUnix=0 means no lower
+// bound on start_time.
+func (c *Client) ActivityLogsForChild(ctx context.Context, childUserID string, sinceUnix int64, limit int) ([]RecentLog, error) {
+	q := url.Values{}
+	q.Set("select", "device_id,process_name,window_title,duration_seconds,start_time,end_time")
+	q.Set("user_id", "eq."+childUserID)
+	if sinceUnix > 0 {
+		q.Set("start_time", fmt.Sprintf("gte.%d", sinceUnix))
+	}
+	q.Set("order", "start_time.desc")
+	q.Set("limit", fmt.Sprintf("%d", limit))
+
+	resp, err := c.request(ctx, http.MethodGet, "/rest/v1/activity_logs?"+q.Encode(), nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readErr(resp)
+	}
+
+	var out []RecentLog
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

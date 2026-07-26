@@ -21,35 +21,36 @@
 extern "C" {
 #include "parentlink.h"
 #include "applimits.h"
+#include "i18n.h"
+}
+
+static QString tr_(const char *key)
+{
+    return QString::fromUtf8(i18n_t(key));
 }
 
 ParentDialog::ParentDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Parent Dashboard");
+    setWindowTitle(tr_("pdlg.title"));
     setMinimumWidth(640);
 
     // ---------------- Mời con ----------------
 
-    auto *inviteNote = new QLabel(
-        "Nhập email tài khoản JustInTime của con. Con sẽ thấy lời mời này "
-        "trong mục \"Được giám sát bởi...\" và phải chủ động đồng ý thì bạn "
-        "mới xem được hoạt động của con.",
-        this
-    );
+    auto *inviteNote = new QLabel(tr_("pdlg.invite_note"), this);
     inviteNote->setWordWrap(true);
     inviteNote->setStyleSheet("color: #7e9ac0; font-size: 11px;");
 
     m_inviteEmail = new QLineEdit(this);
-    m_inviteEmail->setPlaceholderText("email-cua-con@example.com");
+    m_inviteEmail->setPlaceholderText(tr_("pdlg.invite_placeholder"));
 
-    auto *inviteBtn = new QPushButton("Gửi lời mời", this);
+    auto *inviteBtn = new QPushButton(tr_("pdlg.invite_btn"), this);
     connect(inviteBtn, &QPushButton::clicked, this, &ParentDialog::onInvite);
 
     auto *inviteRow = new QHBoxLayout;
     inviteRow->addWidget(m_inviteEmail);
     inviteRow->addWidget(inviteBtn);
 
-    auto *inviteBox = new QGroupBox("Mời con mới", this);
+    auto *inviteBox = new QGroupBox(tr_("pdlg.invite_box"), this);
     auto *inviteBoxLayout = new QVBoxLayout(inviteBox);
     inviteBoxLayout->addWidget(inviteNote);
     inviteBoxLayout->addLayout(inviteRow);
@@ -58,7 +59,7 @@ ParentDialog::ParentDialog(QWidget *parent) : QDialog(parent)
 
     m_childrenTable = new QTableWidget(this);
     m_childrenTable->setColumnCount(2);
-    m_childrenTable->setHorizontalHeaderLabels({"Email con", "Trạng thái"});
+    m_childrenTable->setHorizontalHeaderLabels({tr_("pdlg.col_email"), tr_("pdlg.col_status")});
     m_childrenTable->horizontalHeader()->setStretchLastSection(true);
     m_childrenTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_childrenTable->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -69,33 +70,33 @@ ParentDialog::ParentDialog(QWidget *parent) : QDialog(parent)
         this, &ParentDialog::onChildSelectionChanged
     );
 
-    auto *childrenBox = new QGroupBox("Các con đã liên kết", this);
+    auto *childrenBox = new QGroupBox(tr_("pdlg.children_box"), this);
     auto *childrenBoxLayout = new QVBoxLayout(childrenBox);
     childrenBoxLayout->addWidget(m_childrenTable);
 
     // ---------------- Giới hạn app ----------------
 
-    m_limitsHeader = new QLabel("Chọn 1 con đã \"Đã đồng ý\" ở trên để xem/đặt giới hạn.", this);
+    m_limitsHeader = new QLabel(tr_("pdlg.limits_hint_select"), this);
     m_limitsHeader->setStyleSheet("color: #7e9ac0; font-size: 11px;");
 
     m_limitsTable = new QTableWidget(this);
     m_limitsTable->setColumnCount(3);
-    m_limitsTable->setHorizontalHeaderLabels({"Ứng dụng", "Giới hạn/ngày", "Trạng thái"});
+    m_limitsTable->setHorizontalHeaderLabels({tr_("pdlg.limit_process"), tr_("pdlg.limit_amount"), tr_("pdlg.col_status")});
     m_limitsTable->horizontalHeader()->setStretchLastSection(true);
     m_limitsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_limitsTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_limitsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
     m_processName = new QLineEdit(this);
-    m_processName->setPlaceholderText("vd: RobloxPlayerBeta.exe");
+    m_processName->setPlaceholderText(tr_("pdlg.limit_process_placeholder"));
 
     m_dailyMinutes = new QSpinBox(this);
     m_dailyMinutes->setRange(1, 1440);
     m_dailyMinutes->setValue(60);
-    m_dailyMinutes->setSuffix(" phút/ngày");
+    m_dailyMinutes->setSuffix(tr_("pdlg.limit_minutes_suffix"));
 
-    m_noLimitCheckbox = new QCheckBox("Không giới hạn thời gian", this);
-    m_blockCheckbox   = new QCheckBox("Chặn hẳn (không cho mở app này)", this);
+    m_noLimitCheckbox = new QCheckBox(tr_("pdlg.limit_nolimit"), this);
+    m_blockCheckbox   = new QCheckBox(tr_("pdlg.limit_block"), this);
 
     connect(m_noLimitCheckbox, &QCheckBox::toggled, m_dailyMinutes, &QSpinBox::setDisabled);
     connect(m_blockCheckbox, &QCheckBox::toggled, this, [this](bool checked) {
@@ -104,13 +105,13 @@ ParentDialog::ParentDialog(QWidget *parent) : QDialog(parent)
     });
 
     auto *limitForm = new QFormLayout;
-    limitForm->addRow("Tên tiến trình:", m_processName);
-    limitForm->addRow("Giới hạn:", m_dailyMinutes);
+    limitForm->addRow(tr_("pdlg.limit_process"), m_processName);
+    limitForm->addRow(tr_("pdlg.limit_amount"), m_dailyMinutes);
     limitForm->addRow(QString(), m_noLimitCheckbox);
     limitForm->addRow(QString(), m_blockCheckbox);
 
-    auto *saveLimitBtn   = new QPushButton("Lưu giới hạn", this);
-    auto *deleteLimitBtn = new QPushButton("Xoá giới hạn đã chọn", this);
+    auto *saveLimitBtn   = new QPushButton(tr_("pdlg.limit_save_btn"), this);
+    auto *deleteLimitBtn = new QPushButton(tr_("pdlg.limit_delete_btn"), this);
 
     connect(saveLimitBtn, &QPushButton::clicked, this, &ParentDialog::onSaveLimit);
     connect(deleteLimitBtn, &QPushButton::clicked, this, &ParentDialog::onDeleteLimit);
@@ -120,7 +121,7 @@ ParentDialog::ParentDialog(QWidget *parent) : QDialog(parent)
     limitBtnRow->addWidget(deleteLimitBtn);
     limitBtnRow->addStretch();
 
-    auto *limitsBox = new QGroupBox("Giới hạn ứng dụng", this);
+    auto *limitsBox = new QGroupBox(tr_("pdlg.limits_box"), this);
     auto *limitsBoxLayout = new QVBoxLayout(limitsBox);
     limitsBoxLayout->addWidget(m_limitsHeader);
     limitsBoxLayout->addWidget(m_limitsTable);
@@ -129,7 +130,7 @@ ParentDialog::ParentDialog(QWidget *parent) : QDialog(parent)
 
     // ---------------- Tổng thể ----------------
 
-    auto *closeBtn = new QPushButton("Đóng", this);
+    auto *closeBtn = new QPushButton(tr_("pdlg.close_btn"), this);
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
 
     auto *closeRow = new QHBoxLayout;
@@ -161,11 +162,11 @@ void ParentDialog::refreshChildren()
 
         QString statusText;
         if (strcmp(links[i].status, "pending") == 0)
-            statusText = "Đang chờ con đồng ý";
+            statusText = tr_("pdlg.status_pending");
         else if (strcmp(links[i].status, "approved") == 0)
-            statusText = "Đã đồng ý - đang xem được";
+            statusText = tr_("pdlg.status_approved");
         else
-            statusText = "Đã bị thu hồi";
+            statusText = tr_("pdlg.status_revoked");
 
         m_childrenTable->setItem(i, 0, emailItem);
         m_childrenTable->setItem(i, 1, new QTableWidgetItem(statusText));
@@ -174,14 +175,14 @@ void ParentDialog::refreshChildren()
     if (count == 0)
     {
         m_childrenTable->setRowCount(1);
-        auto *emptyItem = new QTableWidgetItem("Chưa mời con nào. Dùng ô phía trên để gửi lời mời đầu tiên.");
+        auto *emptyItem = new QTableWidgetItem(tr_("pdlg.children_empty"));
         emptyItem->setFlags(Qt::NoItemFlags);
         m_childrenTable->setItem(0, 0, emptyItem);
         m_childrenTable->setSpan(0, 0, 1, 2);
     }
 
     m_limitsTable->setRowCount(0);
-    m_limitsHeader->setText("Chọn 1 con đã \"Đã đồng ý\" ở trên để xem/đặt giới hạn.");
+    m_limitsHeader->setText(tr_("pdlg.limits_hint_select"));
 }
 
 QString ParentDialog::selectedChildUserId() const
@@ -211,7 +212,7 @@ void ParentDialog::refreshLimits()
     if (childId.isEmpty())
     {
         m_limitsTable->setRowCount(0);
-        m_limitsHeader->setText("Chọn 1 con đã \"Đã đồng ý\" ở trên để xem/đặt giới hạn.");
+        m_limitsHeader->setText(tr_("pdlg.limits_hint_select"));
         return;
     }
 
@@ -222,8 +223,8 @@ void ParentDialog::refreshLimits()
 
     m_limitsHeader->setText(
         count > 0
-            ? QString("%1 giới hạn đang áp dụng. Nếu con chưa đồng ý (\"pending\"), giới hạn sẽ không tải/lưu được.").arg(count)
-            : "Chưa có giới hạn nào cho con này. Điền form bên dưới để thêm."
+            ? tr_("pdlg.limits_hint_count").arg(count)
+            : tr_("pdlg.limits_none")
     );
 
     m_limitsTable->setRowCount(count);
@@ -234,12 +235,12 @@ void ParentDialog::refreshLimits()
         nameItem->setData(Qt::UserRole, static_cast<qlonglong>(limits[i].id));
 
         QString limitText = limits[i].blocked
-            ? "-"
+            ? tr_("pdlg.limit_blocked_label")
             : (limits[i].daily_limit_sec >= 0
-                   ? QString("%1 phút/ngày").arg(limits[i].daily_limit_sec / 60)
-                   : "Không giới hạn");
+                   ? QString("%1%2").arg(limits[i].daily_limit_sec / 60).arg(tr_("pdlg.limit_minutes_suffix"))
+                   : tr_("pdlg.limit_unlimited"));
 
-        QString statusText = limits[i].blocked ? "Bị chặn hẳn" : "Cho phép (có giới hạn)";
+        QString statusText = limits[i].blocked ? tr_("pdlg.limit_block") : tr_("pdlg.limit_allowed");
 
         m_limitsTable->setItem(i, 0, nameItem);
         m_limitsTable->setItem(i, 1, new QTableWidgetItem(limitText));
@@ -253,7 +254,7 @@ void ParentDialog::onInvite()
 
     if (email.isEmpty())
     {
-        QMessageBox::information(this, "JustInTime", "Nhập email của con trước.");
+        QMessageBox::information(this, "JustInTime", tr_("pdlg.enter_child_email"));
         return;
     }
 
@@ -262,10 +263,7 @@ void ParentDialog::onInvite()
 
     if (parentlink_invite_child(emailUtf8.constData(), err, sizeof(err)))
     {
-        QMessageBox::information(
-            this, "JustInTime",
-            "Đã gửi lời mời. Con cần vào mục \"Được giám sát bởi...\" trên máy của con để đồng ý."
-        );
+        QMessageBox::information(this, "JustInTime", tr_("pdlg.invite_sent"));
         m_inviteEmail->clear();
         refreshChildren();
     }
@@ -281,7 +279,7 @@ void ParentDialog::onSaveLimit()
 
     if (childId.isEmpty())
     {
-        QMessageBox::information(this, "JustInTime", "Chọn 1 con trong danh sách phía trên trước.");
+        QMessageBox::information(this, "JustInTime", tr_("pdlg.select_child_first"));
         return;
     }
 
@@ -289,7 +287,7 @@ void ParentDialog::onSaveLimit()
 
     if (processName.isEmpty())
     {
-        QMessageBox::information(this, "JustInTime", "Nhập tên tiến trình (vd: RobloxPlayerBeta.exe).");
+        QMessageBox::information(this, "JustInTime", tr_("pdlg.enter_process"));
         return;
     }
 
@@ -313,7 +311,7 @@ void ParentDialog::onSaveLimit()
         )
     )
     {
-        QMessageBox::information(this, "JustInTime", "Đã lưu giới hạn.");
+        QMessageBox::information(this, "JustInTime", tr_("pdlg.limit_saved"));
         m_processName->clear();
         refreshLimits();
     }
@@ -329,7 +327,7 @@ void ParentDialog::onDeleteLimit()
 
     if (items.isEmpty())
     {
-        QMessageBox::information(this, "JustInTime", "Chọn 1 giới hạn trong danh sách trước.");
+        QMessageBox::information(this, "JustInTime", tr_("pdlg.select_limit_first"));
         return;
     }
 

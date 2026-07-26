@@ -35,6 +35,7 @@ static void set_defaults(AppSettings* s)
     s->min_duration_sec     = 2;
     s->autostart_enabled    = 0;
     s->app_role             = APP_ROLE_CHILD;
+    s->language             = APP_LANG_EN;
 
     s->retry_backoff_base_sec = 10;   /* lần đầu thất bại: chờ 10s */
     s->retry_backoff_max_sec  = 1800; /* tối đa chờ 30 phút giữa 2 lần thử */
@@ -130,6 +131,8 @@ static void parse_line(
         s->autostart_enabled = atoi(value);
     else if (strcmp(key, "app_role") == 0)
         s->app_role = atoi(value);
+    else if (strcmp(key, "language") == 0)
+        s->language = atoi(value);
     else if (strcmp(key, "retry_backoff_base_sec") == 0)
         s->retry_backoff_base_sec = atoi(value);
     else if (strcmp(key, "retry_backoff_max_sec") == 0)
@@ -257,6 +260,7 @@ int settings_save(const AppSettings* s)
     fprintf(f, "min_duration_sec=%d\n", s->min_duration_sec);
     fprintf(f, "autostart_enabled=%d\n", s->autostart_enabled);
     fprintf(f, "app_role=%d\n", s->app_role);
+    fprintf(f, "language=%d\n", s->language);
     fprintf(f, "excluded_processes=%s\n", s->excluded_processes);
     fprintf(f, "supabase_url=%s\n", s->supabase_url);
     fprintf(f, "supabase_key=%s\n", s->supabase_key);

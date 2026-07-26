@@ -49,6 +49,7 @@ function activateView(view) {
     if (view === 'cloud') loadCloudData(currentRange);
     if (view === 'local') loadLocalData();
     if (view === 'devices') loadDevicesData();
+    if (view === 'family') loadFamilyData();
 }
 
 // ---------------- Toast alerts ----------------
@@ -660,6 +661,272 @@ async function loadDevicesData() {
                 </li>
             `).join('')
             : `<li style="color:#4a6584; list-style:none;">${LABELS.noMessages}</li>`;
+    } catch (e) {
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+}
+
+// ---------------- Family (consent-based parent/child linking + app limits) ----------------
+
+let familySelectedChildId = null;
+let familyChart = null;
+
+async function loadFamilyData() {
+    await Promise.all([loadFamilyChildren(), loadFamilyParents()]);
+}
+
+document.getElementById('invite-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorDiv = document.getElementById('family-invite-error');
+    errorDiv.innerHTML = '';
+
+    const emailInput = document.getElementById('invite-email');
+    const child_email = emailInput.value.trim();
+    if (!child_email) return;
+
+    try {
+        const res = await fetch('/api/parent/invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ child_email }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+            emailInput.value = '';
+            loadFamilyChildren();
+        } else {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error || 'Request failed'}</div>`;
+        }
+    } catch (e) {
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+});
+
+function familyStatusLabel(status) {
+    if (status === 'pending') return LABELS.familyStatusPending;
+    if (status === 'approved') return LABELS.familyStatusApproved;
+    return LABELS.familyStatusRevoked;
+}
+
+async function loadFamilyChildren() {
+    const errorDiv = document.getElementById('family-children-error');
+    errorDiv.innerHTML = '';
+
+    try {
+        const res = await fetch('/api/parent/children');
+        const data = await res.json();
+
+        if (!data.logged_in) {
+            errorDiv.innerHTML = `<div class="error-banner">${LABELS.loginRequired} — <a href="/login">${LABELS.login}</a></div>`;
+            return;
+        }
+
+        const links = data.links || [];
+        const tbody = document.getElementById('family-children-body');
+
+        if (!links.length) {
+            tbody.innerHTML = `<tr><td colspan="3" style="color:#4a6584;">${LABELS.familyNoChildren}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = links.map(l => `
+            <tr>
+                <td>${l.other_email}</td>
+                <td>${familyStatusLabel(l.status)}</td>
+                <td>
+                    ${l.status !== 'revoked' ? `<button type="button" class="btn btn-outline" onclick="familySelectChild('${l.other_user_id}', this)">${l.status === 'approved' ? '→' : '...'}</button>` : ''}
+                    ${l.status !== 'revoked' ? `<button type="button" class="btn btn-outline" onclick="familyRevokeLink(${l.id})">${LABELS.familyRevoke}</button>` : ''}
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+}
+
+async function familyRevokeLink(id) {
+    try {
+        await fetch('/api/parent/revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        loadFamilyChildren();
+        loadFamilyParents();
+    } catch (e) {}
+}
+
+async function familyApproveLink(id) {
+    try {
+        await fetch('/api/parent/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        loadFamilyParents();
+    } catch (e) {}
+}
+
+function familySelectChild(childUserId, btn) {
+    familySelectedChildId = childUserId;
+    document.getElementById('family-limits-hint').textContent = '';
+    loadFamilyLimits();
+    loadFamilyChildSummary();
+}
+
+async function loadFamilyLimits() {
+    const tbody = document.getElementById('family-limits-body');
+    const hint = document.getElementById('family-limits-hint');
+
+    if (!familySelectedChildId) {
+        hint.textContent = LABELS.familySelectChild;
+        tbody.innerHTML = '';
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/parent/limits?child_id=${encodeURIComponent(familySelectedChildId)}`);
+        const data = await res.json();
+
+        if (data.error) {
+            hint.textContent = data.error;
+            tbody.innerHTML = '';
+            return;
+        }
+
+        hint.textContent = '';
+        const limits = data.limits || [];
+
+        tbody.innerHTML = limits.length
+            ? limits.map(l => `
+                <tr>
+                    <td>${l.process_name}</td>
+                    <td>${l.blocked ? '—' : (l.daily_limit_sec != null ? Math.round(l.daily_limit_sec / 60) + ' min/day' : LABELS.familyNoLimitText)}</td>
+                    <td><button type="button" class="btn btn-outline" onclick="familyDeleteLimit(${l.id})">${LABELS.familyDeleteLimit}</button></td>
+                </tr>
+            `).join('')
+            : `<tr><td colspan="3" style="color:#4a6584;">${LABELS.familyNoLimits}</td></tr>`;
+    } catch (e) {
+        hint.textContent = `Connection error: ${e}`;
+    }
+}
+
+document.getElementById('limit-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    if (!familySelectedChildId) {
+        document.getElementById('family-limits-hint').textContent = LABELS.familySelectChild;
+        return;
+    }
+
+    const process_name = document.getElementById('limit-process').value.trim();
+    if (!process_name) return;
+
+    const noLimit = document.getElementById('limit-nolimit').checked;
+    const blocked = document.getElementById('limit-block').checked;
+    const minutes = parseInt(document.getElementById('limit-minutes').value, 10) || 60;
+
+    try {
+        await fetch('/api/parent/limits/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                child_user_id: familySelectedChildId,
+                process_name,
+                daily_limit_min: (noLimit || blocked) ? null : minutes,
+                blocked,
+            }),
+        });
+        document.getElementById('limit-process').value = '';
+        loadFamilyLimits();
+    } catch (e) {}
+});
+
+async function familyDeleteLimit(id) {
+    try {
+        await fetch('/api/parent/limits/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        loadFamilyLimits();
+    } catch (e) {}
+}
+
+async function loadFamilyChildSummary() {
+    if (!familySelectedChildId) return;
+
+    try {
+        const res = await fetch(`/api/parent/child-summary?child_id=${encodeURIComponent(familySelectedChildId)}`);
+        const data = await res.json();
+
+        const apps = data.apps || [];
+        const ctx = document.getElementById('familyChart').getContext('2d');
+        if (familyChart) familyChart.destroy();
+
+        familyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: apps.map(a => a.process_name),
+                datasets: [{ label: 'Seconds', data: apps.map(a => a.total_seconds), backgroundColor: '#f5a524', borderRadius: 6 }]
+            },
+            options: {
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#7e9ac0' }, grid: { color: '#1c3a5e' } },
+                    y: { ticks: { color: '#dce8f7' }, grid: { display: false } }
+                }
+            }
+        });
+
+        const tbody = document.getElementById('family-recent-body');
+        const recent = data.recent || [];
+        tbody.innerHTML = recent.length
+            ? recent.map(a => `
+                <tr>
+                    <td>${a.process_name}</td>
+                    <td>${(a.window_title || '').substring(0, 60)}</td>
+                    <td>${fmtDuration(a.duration_seconds)}</td>
+                    <td>${new Date(a.start_time * 1000).toLocaleString()}</td>
+                </tr>
+            `).join('')
+            : '';
+    } catch (e) {}
+}
+
+async function loadFamilyParents() {
+    const errorDiv = document.getElementById('family-parents-error');
+    errorDiv.innerHTML = '';
+
+    try {
+        const res = await fetch('/api/parent/parents');
+        const data = await res.json();
+
+        if (!data.logged_in) {
+            errorDiv.innerHTML = `<div class="error-banner">${LABELS.loginRequired} — <a href="/login">${LABELS.login}</a></div>`;
+            return;
+        }
+
+        const links = data.links || [];
+        const tbody = document.getElementById('family-parents-body');
+
+        if (!links.length) {
+            tbody.innerHTML = `<tr><td colspan="3" style="color:#4a6584;">${LABELS.familyNoParents}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = links.map(l => `
+            <tr>
+                <td>${l.other_email}</td>
+                <td>${familyStatusLabel(l.status)}</td>
+                <td>
+                    ${l.status === 'pending' ? `<button type="button" class="btn" onclick="familyApproveLink(${l.id})">${LABELS.familyApprove}</button>` : ''}
+                    ${l.status !== 'revoked' ? `<button type="button" class="btn btn-outline" onclick="familyRevokeLink(${l.id})">${LABELS.familyRevoke}</button>` : ''}
+                </td>
+            </tr>
+        `).join('');
     } catch (e) {
         errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
     }

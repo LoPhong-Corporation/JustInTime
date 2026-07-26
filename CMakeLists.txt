@@ -38,6 +38,8 @@ add_executable(JustInTime WIN32
         include/shared/applimits.h
         src/shared/restclient.c
         include/shared/restclient.h
+        src/shared/i18n.c
+        include/shared/i18n.h
         third_party/sqlite/sqlite3.c
         third_party/sqlite/sqlite3.h
 

@@ -18,6 +18,12 @@
 extern "C" {
 #include "settings.h"
 #include "error_codes.h"
+#include "i18n.h"
+}
+
+static QString tr_(const char *key)
+{
+    return QString::fromUtf8(i18n_t(key));
 }
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
@@ -51,20 +57,22 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     m_autostart->setChecked(s.autostart_enabled != 0);
 
     m_roleCombo = new QComboBox(this);
-    m_roleCombo->addItem("Con (Agent) - máy này được theo dõi/giới hạn", APP_ROLE_CHILD);
-    m_roleCombo->addItem("Phụ huynh (Parent) - máy này xem/giới hạn máy con", APP_ROLE_PARENT);
+    m_roleCombo->addItem(tr_("settings.role_child"), APP_ROLE_CHILD);
+    m_roleCombo->addItem(tr_("settings.role_parent"), APP_ROLE_PARENT);
     m_roleCombo->setCurrentIndex(s.app_role == APP_ROLE_PARENT ? 1 : 0);
 
-    auto *roleNote = new QLabel(
-        "Đổi vai trò không xoá dữ liệu đã theo dõi trên máy này. "
-        "Vai trò \"Con\" là mặc định và giữ nguyên hành vi cũ.",
-        this
-    );
+    auto *roleNote = new QLabel(tr_("settings.role_note"), this);
     roleNote->setWordWrap(true);
     roleNote->setStyleSheet("color: #7e9ac0; font-size: 11px;");
 
+    m_languageCombo = new QComboBox(this);
+    m_languageCombo->addItem("English", APP_LANG_EN);
+    m_languageCombo->addItem("Tiếng Việt", APP_LANG_VI);
+    m_languageCombo->setCurrentIndex(s.language == APP_LANG_VI ? 1 : 0);
+
     auto *form = new QFormLayout;
-    form->addRow("Vai trò máy này:", m_roleCombo);
+    form->addRow(tr_("settings.language_label"), m_languageCombo);
+    form->addRow(tr_("settings.role_label"), m_roleCombo);
     form->addRow(QString(), roleNote);
     form->addRow("Sync interval (seconds):", m_syncInterval);
     form->addRow("Backup interval (seconds):", m_backupInterval);
@@ -101,6 +109,7 @@ void SettingsDialog::onSave()
     s.min_duration_sec     = m_minDuration->value();
     s.autostart_enabled    = m_autostart->isChecked() ? 1 : 0;
     s.app_role              = m_roleCombo->currentData().toInt();
+    s.language              = m_languageCombo->currentData().toInt();
 
     QByteArray excludedUtf8 = m_excludedProcesses->text().toUtf8();
 

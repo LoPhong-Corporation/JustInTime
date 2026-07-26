@@ -28,6 +28,15 @@ extern "C" {
 #define APP_ROLE_CHILD  0
 #define APP_ROLE_PARENT 1
 
+/*
+ * Ngôn ngữ giao diện (tray + dialogs). Mặc định English, khớp
+ * với phần lớn UI gốc và với dashboard-go's default - đổi được
+ * trong Settings, áp dụng ngay không cần khởi động lại (xem
+ * i18n.h, TrayIcon::rebuildMenu()).
+ */
+#define APP_LANG_EN 0
+#define APP_LANG_VI 1
+
 typedef struct
 {
     int  sync_interval_sec;
@@ -41,6 +50,11 @@ typedef struct
      * APP_ROLE_PARENT. Đổi trong Settings > "Vai trò".
      */
     int  app_role;
+
+    /*
+     * Ngôn ngữ giao diện: APP_LANG_EN (mặc định) hoặc APP_LANG_VI.
+     */
+    int  language;
 
     /*
      * Retry Queue: backoff cơ bản (giây) và giới hạn tối đa

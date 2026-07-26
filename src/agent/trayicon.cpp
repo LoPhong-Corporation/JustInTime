@@ -30,6 +30,7 @@ extern "C" {
 #include "config.h"
 #include "activity.h"
 #include "settings.h"
+#include "i18n.h"
 }
 
 namespace {
@@ -71,6 +72,14 @@ bool isPortOpen(quint16 port)
     return socket.waitForConnected(150);
 }
 
+// Chuyển thẳng kết quả i18n_t() (UTF-8) sang QString - dùng ở
+// mọi nơi trong file này thay vì gõ QString::fromUtf8(i18n_t(...))
+// lặp đi lặp lại.
+QString tr_(const char *key)
+{
+    return QString::fromUtf8(i18n_t(key));
+}
+
 } // namespace
 
 TrayIcon::TrayIcon(QObject *parent) : QObject(parent)
@@ -80,66 +89,57 @@ TrayIcon::TrayIcon(QObject *parent) : QObject(parent)
     m_accountAction = m_menu.addAction(QString());
     m_accountAction->setEnabled(false);
 
-    m_loginAction  = m_menu.addAction("Log in / Sign up...", this, &TrayIcon::onLogin);
-    m_logoutAction = m_menu.addAction("Log out", this, &TrayIcon::onLogout);
+    m_loginAction  = m_menu.addAction(tr_("tray.login"), this, &TrayIcon::onLogin);
+    m_logoutAction = m_menu.addAction(tr_("tray.logout"), this, &TrayIcon::onLogout);
 
     m_menu.addSeparator();
 
-    m_pauseAction  = m_menu.addAction("Pause tracking", this, &TrayIcon::onTogglePause);
-    m_reportAction = m_menu.addAction("View today's report", this, &TrayIcon::onViewReport);
+    m_pauseAction  = m_menu.addAction(tr_("tray.pause"), this, &TrayIcon::onTogglePause);
+    m_reportAction = m_menu.addAction(tr_("tray.report"), this, &TrayIcon::onViewReport);
 
     m_menu.addSeparator();
 
-    m_settingsAction = m_menu.addAction("Settings...", this, &TrayIcon::onSettings);
-    m_supabaseAction = m_menu.addAction("Supabase Setup...", this, &TrayIcon::onSupabaseSetup);
-    m_remoteViewAction = m_menu.addAction("Remote View...", this, &TrayIcon::onRemoteView);
+    m_settingsAction = m_menu.addAction(tr_("tray.settings"), this, &TrayIcon::onSettings);
+    m_supabaseAction = m_menu.addAction(tr_("tray.supabase_setup"), this, &TrayIcon::onSupabaseSetup);
+    m_remoteViewAction = m_menu.addAction(tr_("tray.remote_view"), this, &TrayIcon::onRemoteView);
 
     m_menu.addSeparator();
 
-    m_dashboardMenu = m_menu.addMenu("Dashboards");
+    m_dashboardMenu = m_menu.addMenu(tr_("tray.dashboards_menu"));
     m_pythonDashboardAction = m_dashboardMenu->addAction(
-        "Open Web Dashboard (Python)", this, &TrayIcon::onOpenPythonDashboard
+        tr_("tray.dashboard_python"), this, &TrayIcon::onOpenPythonDashboard
     );
     m_goDashboardAction = m_dashboardMenu->addAction(
-        "Open Local Dashboard (Go)", this, &TrayIcon::onOpenGoDashboard
+        tr_("tray.dashboard_go"), this, &TrayIcon::onOpenGoDashboard
     );
 
-    const QString dashboardTip =
-        "Both dashboards show the same data on http://127.0.0.1:5000 "
-        "(they're two implementations of the same dashboard, not meant "
-        "to run at the same time). Whichever is already running will "
-        "just be opened again.";
+    const QString dashboardTip = tr_("tray.dashboard_tip");
     m_pythonDashboardAction->setToolTip(dashboardTip);
     m_goDashboardAction->setToolTip(dashboardTip);
 
     m_menu.addSeparator();
 
     m_parentLinkAction = m_menu.addAction(
-        "Được giám sát bởi...", this, &TrayIcon::onParentLinkSettings
+        tr_("tray.parent_link"), this, &TrayIcon::onParentLinkSettings
     );
-    m_parentLinkAction->setToolTip(
-        "Xem đầy đủ danh sách phụ huynh đang xin/đã được xem hoạt động của máy này, "
-        "và thu hồi quyền xem bất kỳ lúc nào."
-    );
+    m_parentLinkAction->setToolTip(tr_("tray.parent_link_tip"));
 
     m_parentDashboardAction = m_menu.addAction(
-        "Parent Dashboard...", this, &TrayIcon::onParentDashboard
+        tr_("tray.parent_dashboard"), this, &TrayIcon::onParentDashboard
     );
-    m_parentDashboardAction->setToolTip(
-        "Mời con, xem hoạt động, và đặt giới hạn thời gian/chặn app."
-    );
+    m_parentDashboardAction->setToolTip(tr_("tray.parent_dashboard_tip"));
 
-    m_debugAction = m_menu.addAction("Show debug console", this, &TrayIcon::onToggleDebugConsole);
+    m_debugAction = m_menu.addAction(tr_("tray.debug_console"), this, &TrayIcon::onToggleDebugConsole);
     //m_startWebSVAction = m_menu.addAction("Start Web Dashboard", this, &TrayIcon::onStartWebSVAction);
     m_debugAction->setCheckable(true);
 
     m_menu.addSeparator();
 
-    m_checkUpdateAction = m_menu.addAction("Check for Updates...", this, &TrayIcon::onCheckForUpdates);
-    m_aboutAction       = m_menu.addAction("About JustInTime...", this, &TrayIcon::onAbout);
+    m_checkUpdateAction = m_menu.addAction(tr_("tray.check_updates"), this, &TrayIcon::onCheckForUpdates);
+    m_aboutAction       = m_menu.addAction(tr_("tray.about"), this, &TrayIcon::onAbout);
 
     m_menu.addSeparator();
-    m_exitAction = m_menu.addAction("Exit", this, &TrayIcon::onExit);
+    m_exitAction = m_menu.addAction(tr_("tray.exit"), this, &TrayIcon::onExit);
 
     m_trayIcon.setContextMenu(&m_menu);
 
@@ -198,7 +198,7 @@ void TrayIcon::rebuildMenu()
     if (session.logged_in)
     {
         m_accountAction->setText(
-            QString("Logged in: %1").arg(QString::fromUtf8(session.email))
+            tr_("tray.logged_in_as").arg(QString::fromUtf8(session.email))
         );
         m_accountAction->setVisible(true);
         m_loginAction->setVisible(false);
@@ -211,7 +211,7 @@ void TrayIcon::rebuildMenu()
         m_logoutAction->setVisible(false);
     }
 
-    m_pauseAction->setText(m_paused.load() ? "Resume tracking" : "Pause tracking");
+    m_pauseAction->setText(m_paused.load() ? tr_("tray.resume") : tr_("tray.pause"));
     m_debugAction->setChecked(m_debugVisible);
 
     AppSettings s;
@@ -477,15 +477,8 @@ void TrayIcon::onAbout()
 {
     QMessageBox::about(
         nullptr,
-        "About JustInTime",
-        QString(
-            "<h3>JustInTime</h3>"
-            "<p>Version %1</p>"
-            "<p>Lightweight activity tracker with optional Supabase cloud sync, "
-            "a local/offline dashboard, and cross-device messaging.</p>"
-            "<p>Publisher: %2<br>"
-            "<a href=\"%3\">%3</a></p>"
-        ).arg(APP_VERSION, APP_PUBLISHER, APP_WEBSITE)
+        tr_("about.title"),
+        tr_("about.body").arg(APP_VERSION, APP_PUBLISHER, APP_WEBSITE)
     );
 }
 
@@ -494,7 +487,7 @@ void TrayIcon::onCheckForUpdates()
     m_manualUpdateCheck = true;
 
     m_checkUpdateAction->setEnabled(false);
-    m_checkUpdateAction->setText("Checking for updates...");
+    m_checkUpdateAction->setText(tr_("tray.checking_updates"));
 
     m_updateChecker->checkNow();
 }
@@ -502,7 +495,7 @@ void TrayIcon::onCheckForUpdates()
 void TrayIcon::onUpdateAvailable(const QString &version, const QString &downloadUrl, const QString &notes)
 {
     m_checkUpdateAction->setEnabled(true);
-    m_checkUpdateAction->setText("Check for Updates...");
+    m_checkUpdateAction->setText(tr_("tray.check_updates"));
 
     m_pendingDownloadUrl = downloadUrl;
 
@@ -517,7 +510,7 @@ void TrayIcon::onUpdateAvailable(const QString &version, const QString &download
         });
     }
 
-    m_downloadUpdateAction->setText(QString("\u2B06 Update available: v%1").arg(version));
+    m_downloadUpdateAction->setText(tr_("tray.update_available").arg(version));
     m_downloadUpdateAction->setVisible(true);
 
     /*
@@ -551,14 +544,14 @@ void TrayIcon::onUpdateAvailable(const QString &version, const QString &download
 void TrayIcon::onUpdateUpToDate()
 {
     m_checkUpdateAction->setEnabled(true);
-    m_checkUpdateAction->setText("Check for Updates...");
+    m_checkUpdateAction->setText(tr_("tray.check_updates"));
 
     if (m_manualUpdateCheck)
     {
         QMessageBox::information(
             nullptr,
             "JustInTime",
-            QString("You're running the latest version (%1).").arg(APP_VERSION)
+            tr_("update.you_have_latest").arg(APP_VERSION)
         );
     }
 
@@ -568,7 +561,7 @@ void TrayIcon::onUpdateUpToDate()
 void TrayIcon::onUpdateCheckFailed(const QString &reason)
 {
     m_checkUpdateAction->setEnabled(true);
-    m_checkUpdateAction->setText("Check for Updates...");
+    m_checkUpdateAction->setText(tr_("tray.check_updates"));
 
     /*
      * Kiểm tra ngầm thất bại (vd không có mạng) thì âm thầm bỏ
@@ -580,7 +573,7 @@ void TrayIcon::onUpdateCheckFailed(const QString &reason)
         QMessageBox::warning(
             nullptr,
             "JustInTime",
-            QString("Could not check for updates:\n%1").arg(reason)
+            tr_("update.check_failed").arg(reason)
         );
     }
 
@@ -606,15 +599,15 @@ void TrayIcon::notifyLimitBlocked(const QString &processName, int reason)
 
     if (reason == LIMIT_REASON_BLOCKED)
     {
-        body = QString("\"%1\" has been closed - a parent has blocked this app.").arg(processName);
+        body = tr_("limit.blocked").arg(processName);
     }
     else if (reason == LIMIT_REASON_TIME_UP)
     {
-        body = QString("\"%1\" has been closed - today's time limit set by a parent has been reached.").arg(processName);
+        body = tr_("limit.time_up").arg(processName);
     }
     else
     {
-        body = QString("\"%1\" has been closed by a parent-set limit.").arg(processName);
+        body = tr_("limit.generic").arg(processName);
     }
 
     m_trayIcon.showMessage(title, body, QSystemTrayIcon::Warning, 8000);

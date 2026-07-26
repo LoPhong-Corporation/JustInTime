@@ -26,4 +26,5 @@ private:
     QLineEdit *m_excludedProcesses;
     QCheckBox *m_autostart;
     QComboBox *m_roleCombo;
+    QComboBox *m_languageCombo;
 };

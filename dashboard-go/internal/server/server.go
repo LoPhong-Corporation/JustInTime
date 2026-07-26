@@ -144,6 +144,16 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/inbox", s.handleInbox)
 	s.mux.HandleFunc("/api/send", s.handleSend)
 	s.mux.HandleFunc("/api/inbox/read", s.handleMarkRead)
+
+	s.mux.HandleFunc("/api/parent/children", s.handleParentChildren)
+	s.mux.HandleFunc("/api/parent/parents", s.handleParentParents)
+	s.mux.HandleFunc("/api/parent/invite", s.handleParentInvite)
+	s.mux.HandleFunc("/api/parent/approve", s.handleParentApprove)
+	s.mux.HandleFunc("/api/parent/revoke", s.handleParentRevoke)
+	s.mux.HandleFunc("/api/parent/child-summary", s.handleParentChildSummary)
+	s.mux.HandleFunc("/api/parent/limits", s.handleParentLimits)
+	s.mux.HandleFunc("/api/parent/limits/set", s.handleParentLimitSet)
+	s.mux.HandleFunc("/api/parent/limits/delete", s.handleParentLimitDelete)
 }
 
 // ---------------------------------------------------------------------
@@ -655,6 +665,250 @@ func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 
 	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
 		return struct{}{}, c.MarkRead(r.Context(), req.ID)
+	})
+	if err != nil {
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// ---------------------------------------------------------------------
+// Parent/child linking + app limits API (see
+// migrations/004_parent_links.sql). Consent-based: a parent invites by
+// email, but sees nothing until the child approves, and the child can
+// revoke at any time. Mirrors the native Qt ParentDialog/
+// ParentLinkDialog in the C++ agent — same backend, same rules, either
+// UI works interchangeably for the same account.
+// ---------------------------------------------------------------------
+
+func (s *Server) handleParentChildren(w http.ResponseWriter, r *http.Request) {
+	links, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.ParentLink, error) {
+		return c.ListLinksAsParent(r.Context())
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeJSON(w, map[string]any{"links": []cloud.ParentLink{}, "logged_in": false})
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"links": links, "logged_in": true})
+}
+
+func (s *Server) handleParentParents(w http.ResponseWriter, r *http.Request) {
+	links, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.ParentLink, error) {
+		return c.ListLinksAsChild(r.Context())
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeJSON(w, map[string]any{"links": []cloud.ParentLink{}, "logged_in": false})
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"links": links, "logged_in": true})
+}
+
+type inviteRequest struct {
+	ChildEmail string `json:"child_email"`
+}
+
+func (s *Server) handleParentInvite(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req inviteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ChildEmail == "" {
+		writeErr(w, http.StatusBadRequest, "child_email is required")
+		return
+	}
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.InviteChild(r.Context(), req.ChildEmail)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusUnauthorized, "not logged in")
+			return
+		}
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+type linkIDRequest struct {
+	ID int64 `json:"id"`
+}
+
+func (s *Server) handleParentApprove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req linkIDRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.ApproveLink(r.Context(), req.ID)
+	})
+	if err != nil {
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleParentRevoke(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req linkIDRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.RevokeLink(r.Context(), req.ID)
+	})
+	if err != nil {
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleParentChildSummary(w http.ResponseWriter, r *http.Request) {
+	childID := r.URL.Query().Get("child_id")
+	if childID == "" {
+		writeErr(w, http.StatusBadRequest, "child_id is required")
+		return
+	}
+
+	// Hôm nay theo giờ địa phương của máy chạy dashboard (đơn
+	// giản, khớp với cách agent C tính "hôm nay" cục bộ).
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	logs, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.RecentLog, error) {
+		return c.ActivityLogsForChild(r.Context(), childID, todayStart.Unix(), 500)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusUnauthorized, "not logged in")
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+
+	byApp := map[string]int64{}
+	for _, l := range logs {
+		byApp[l.ProcessName] += l.Duration
+	}
+
+	type appUsage struct {
+		ProcessName  string `json:"process_name"`
+		TotalSeconds int64  `json:"total_seconds"`
+	}
+	var apps []appUsage
+	for name, secs := range byApp {
+		apps = append(apps, appUsage{ProcessName: name, TotalSeconds: secs})
+	}
+	sort.Slice(apps, func(i, j int) bool { return apps[i].TotalSeconds > apps[j].TotalSeconds })
+
+	writeJSON(w, map[string]any{"apps": apps, "recent": logs})
+}
+
+func (s *Server) handleParentLimits(w http.ResponseWriter, r *http.Request) {
+	childID := r.URL.Query().Get("child_id")
+	if childID == "" {
+		writeErr(w, http.StatusBadRequest, "child_id is required")
+		return
+	}
+
+	limits, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.AppLimit, error) {
+		return c.ListLimitsForChild(r.Context(), childID)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusUnauthorized, "not logged in")
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"limits": limits})
+}
+
+type setLimitRequest struct {
+	ChildUserID   string `json:"child_user_id"`
+	ProcessName   string `json:"process_name"`
+	DailyLimitMin *int   `json:"daily_limit_min"` // phút; null = không giới hạn
+	Blocked       bool   `json:"blocked"`
+}
+
+func (s *Server) handleParentLimitSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req setLimitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.ChildUserID == "" || req.ProcessName == "" {
+		writeErr(w, http.StatusBadRequest, "child_user_id and process_name are required")
+		return
+	}
+
+	var dailyLimitSec *int
+	if req.DailyLimitMin != nil {
+		sec := *req.DailyLimitMin * 60
+		dailyLimitSec = &sec
+	}
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.SetLimit(r.Context(), req.ChildUserID, req.ProcessName, dailyLimitSec, req.Blocked)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusUnauthorized, "not logged in")
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+type deleteLimitRequest struct {
+	ID int64 `json:"id"`
+}
+
+func (s *Server) handleParentLimitDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req deleteLimitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.DeleteLimit(r.Context(), req.ID)
 	})
 	if err != nil {
 		s.writeCloudErr(w, err)
