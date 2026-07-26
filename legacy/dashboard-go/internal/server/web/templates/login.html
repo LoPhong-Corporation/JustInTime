@@ -1,0 +1,42 @@
+{{define "login.html"}}
+<!DOCTYPE html>
+<html lang="{{.DS.Language}}">
+<head>
+    <meta charset="UTF-8">
+    <title>JustInTime Dashboard - Login</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root { --app-font: {{css .FontStack}}; }
+    </style>
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-box">
+            <h1>&#9679; JustInTime</h1>
+
+            {{if .Extra.error}}
+            <div class="error-banner">{{.Extra.error}}</div>
+            {{end}}
+
+            <p style="color:#7e9ac0; font-size:12px; margin-top:-8px; margin-bottom:20px;">
+                {{.T.login_required}}
+            </p>
+
+            <form method="POST" action="/login">
+                <label for="email">{{.T.login_email}}</label>
+                <input type="email" id="email" name="email" required autofocus>
+
+                <label for="password">{{.T.login_password}}</label>
+                <input type="password" id="password" name="password" required>
+
+                <button type="submit">{{.T.login}}</button>
+            </form>
+
+            <p style="text-align:center; margin-top:18px;">
+                <a href="/" style="font-size:12px;">&larr; {{.T.nav_local}}</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+{{end}}

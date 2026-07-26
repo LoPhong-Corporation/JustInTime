@@ -1,0 +1,377 @@
+{{define "index.html"}}
+<!DOCTYPE html>
+<html lang="{{.DS.Language}}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{.T.app_title}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root { --app-font: {{css .FontStack}}; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="app-shell">
+
+        <div class="sidebar no-print">
+            <div class="brand"><span class="dot"></span>JustInTime</div>
+            <nav>
+                <a href="/?view=overview" class="nav-link sidebar-view-link" data-view="overview">
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+                    {{.T.nav_system}}
+                </a>
+                <a href="/?view=cpu" class="nav-link sidebar-view-link" data-view="cpu">
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>
+                    CPU
+                </a>
+                <a href="/?view=ram" class="nav-link sidebar-view-link" data-view="ram">
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M7 7v10M11 7v10M15 7v10"/></svg>
+                    Memory
+                </a>
+                <a href="/?view=disk" class="nav-link sidebar-view-link" data-view="disk">
+                    <svg class="icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
+                    Disk
+                </a>
+                <a href="/?view=network" class="nav-link sidebar-view-link" data-view="network">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v5M12 12.5 6.7 17M12 12.5l5.3 4.5"/></svg>
+                    Network
+                </a>
+                <a href="/?view=local" class="nav-link sidebar-view-link" data-view="local">
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h4"/></svg>
+                    {{.T.nav_local}}
+                </a>
+                <a href="/?view=cloud" class="nav-link sidebar-view-link" data-view="cloud">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 7 9.1 4 4 0 0 0 7 18z"/></svg>
+                    {{.T.nav_cloud}}
+                </a>
+                <a href="/?view=devices" class="nav-link sidebar-view-link" data-view="devices">
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 18h6"/><rect x="18" y="8" width="4" height="8" rx="1"/></svg>
+                    {{.T.nav_devices}}
+                </a>
+                <a href="/settings" class="nav-link" style="margin-top:12px; border-top:1px solid #1c3a5e; padding-top:16px;">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c.16.5.62.86 1.15 1H21a2 2 0 1 1 0 4h-.09c-.53.14-.99.5-1.15 1z"/></svg>
+                    {{.T.nav_settings}}
+                </a>
+            </nav>
+        </div>
+
+        <div class="main-area">
+            <div class="topbar no-print">
+                <h1>{{.T.app_title}}</h1>
+                <div class="search-wrap">
+                    <input type="text" id="global-search" placeholder="Search processes…" autocomplete="off">
+                </div>
+                <div class="user-info">
+                    <span class="status-badge" id="status-badge"><span class="dot"></span><span id="status-text">Running</span></span>
+                    {{if .LoggedIn}}
+                        <span>{{.CurrentEmail}}</span>
+                        <a class="logout" href="/logout">{{.T.logout}}</a>
+                    {{else}}
+                        <a class="logout" style="color:#5aa9ff;border-color:#2f7de1;" href="/login">{{.T.login}}</a>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="container">
+
+    <!-- ============ OVERVIEW ============ -->
+    <div id="view-overview" class="dash-view">
+        <div class="grid cols-4">
+            <div class="stat-card">
+                <div class="stat-card-head">
+                    <div>
+                        <div class="stat-title">CPU</div>
+                        <div class="stat-subtitle" id="card-cpu-subtitle">—</div>
+                    </div>
+                    <span class="stat-menu">&#8942;</span>
+                </div>
+                <div class="stat-percent" id="card-cpu-percent">--%</div>
+                <div class="stat-graph"><canvas id="sparkCpu"></canvas></div>
+                <div class="stat-updated" id="card-cpu-updated">—</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-card-head">
+                    <div>
+                        <div class="stat-title">Memory</div>
+                        <div class="stat-subtitle" id="card-ram-subtitle">—</div>
+                    </div>
+                    <span class="stat-menu">&#8942;</span>
+                </div>
+                <div class="stat-percent" id="card-ram-percent">--%</div>
+                <div class="stat-graph"><canvas id="sparkRam"></canvas></div>
+                <div class="stat-updated" id="card-ram-updated">—</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-card-head">
+                    <div>
+                        <div class="stat-title">Disk</div>
+                        <div class="stat-subtitle" id="card-disk-subtitle">—</div>
+                    </div>
+                    <span class="stat-menu">&#8942;</span>
+                </div>
+                <div class="stat-percent" id="card-disk-percent">--%</div>
+                <div class="stat-graph"><canvas id="sparkDisk"></canvas></div>
+                <div class="stat-updated" id="card-disk-updated">—</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-card-head">
+                    <div>
+                        <div class="stat-title">Network</div>
+                        <div class="stat-subtitle" id="card-net-subtitle">—</div>
+                    </div>
+                    <span class="stat-menu">&#8942;</span>
+                </div>
+                <div class="stat-percent" id="card-net-percent">--%</div>
+                <div class="stat-graph"><canvas id="sparkNet"></canvas></div>
+                <div class="stat-updated" id="card-net-updated">—</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700;">System Performance</h3>
+            <div class="stat-subtitle" style="margin:-8px 0 14px 0;">Realtime Performance Overview</div>
+            <canvas id="historyChart"></canvas>
+            <div class="stat-updated" id="history-updated">—</div>
+        </div>
+
+        <div class="panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <div>
+                    <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700; margin:0;">Processes</h3>
+                    <div class="stat-subtitle">Running Processes</div>
+                </div>
+            </div>
+            <table class="process-table">
+                <thead>
+                    <tr><th>PID</th><th>Name</th><th>CPU</th><th>Memory</th><th>Status</th></tr>
+                </thead>
+                <tbody id="process-body"><tr><td colspan="5" style="color:#4a6584;">Loading…</td></tr></tbody>
+            </table>
+        </div>
+
+        <div class="section-title">{{.T.machine_config}}</div>
+        <div class="grid cols-2">
+            <div class="panel">
+                <h3>{{.T.system_info}}</h3>
+                <div id="machine-info-left"></div>
+            </div>
+            <div class="panel">
+                <h3>{{.T.storage_info}}</h3>
+                <div id="machine-info-disks"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ CPU ============ -->
+    <div id="view-cpu" class="dash-view" style="display:none;">
+        <div class="grid cols-2">
+            <div class="panel">
+                <h3>CPU Load</h3>
+                <div class="radial-gauge-wrap">
+                    <canvas id="gaugeCpuTab" width="200" height="110"></canvas>
+                    <div class="radial-gauge-value" id="cpu-value-tab">--%</div>
+                </div>
+            </div>
+            <div class="panel">
+                <h3>Processor Info</h3>
+                <div id="cpu-info"></div>
+            </div>
+        </div>
+
+        <div class="section-title">Per-Core Load</div>
+        <div class="panel">
+            <div id="cpu-cores-grid" class="cores-grid"></div>
+        </div>
+
+        <div class="section-title">CPU History</div>
+        <div class="panel">
+            <canvas id="cpuHistoryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- ============ RAM ============ -->
+    <div id="view-ram" class="dash-view" style="display:none;">
+        <div class="grid cols-2">
+            <div class="panel">
+                <h3>Memory Load</h3>
+                <div class="radial-gauge-wrap">
+                    <canvas id="gaugeRamTab" width="200" height="110"></canvas>
+                    <div class="radial-gauge-value" id="ram-value-tab">--%</div>
+                </div>
+            </div>
+            <div class="panel">
+                <h3>Memory Breakdown</h3>
+                <div id="ram-info"></div>
+            </div>
+        </div>
+
+        <div class="section-title">RAM &amp; Swap History</div>
+        <div class="panel">
+            <canvas id="ramHistoryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- ============ DISK ============ -->
+    <div id="view-disk" class="dash-view" style="display:none;">
+        <div class="section-title">Partitions</div>
+        <div class="panel">
+            <div id="disk-partitions"></div>
+        </div>
+
+        <div class="section-title">Disk I/O Throughput</div>
+        <div class="panel">
+            <canvas id="diskIoChart"></canvas>
+        </div>
+    </div>
+
+    <!-- ============ NETWORK ============ -->
+    <div id="view-network" class="dash-view" style="display:none;">
+        <div class="section-title">Interfaces</div>
+        <div class="panel">
+            <table>
+                <thead><tr><th>Interface</th><th>IPv4</th><th>Status</th><th>Link Speed</th></tr></thead>
+                <tbody id="network-interfaces-body"></tbody>
+            </table>
+        </div>
+
+        <div class="section-title">Throughput</div>
+        <div class="grid cols-2">
+            <div class="panel">
+                <h3>Live Speed</h3>
+                <div class="metric-value" style="font-size:18px;">
+                    &#8595; <span id="net-down-tab">--</span><br>
+                    &#8593; <span id="net-up-tab">--</span>
+                </div>
+            </div>
+            <div class="panel">
+                <h3>History</h3>
+                <canvas id="netHistoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ LOCAL ACTIVITY (new: works fully offline) ============ -->
+    <div id="view-local" class="dash-view" style="display:none;">
+        <div class="section-title">{{.T.local_title}}</div>
+        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.local_note}}</p>
+
+        <div id="local-error"></div>
+
+        <div class="section-title">{{.T.local_time_today}}</div>
+        <div class="panel">
+            <canvas id="localChart"></canvas>
+        </div>
+
+        <div class="section-title">{{.T.local_recent}}</div>
+        <div class="panel">
+            <table>
+                <thead>
+                    <tr><th>{{.T.process}}</th><th>{{.T.window_title}}</th><th>{{.T.duration}}</th><th>{{.T.when}}</th></tr>
+                </thead>
+                <tbody id="local-recent-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ============ CLOUD ============ -->
+    <div id="view-cloud" class="dash-view" style="display:none;">
+
+        <div class="tabs">
+            <button data-range="today" class="active range-btn">{{.T.today}}</button>
+            <button data-range="week" class="range-btn">{{.T.week}}</button>
+            <button data-range="month" class="range-btn">{{.T.month}}</button>
+        </div>
+
+        <div id="cloud-error"></div>
+
+        <div class="section-title">
+            {{.T.time_by_app}}
+            <span>
+                <a class="btn btn-outline" id="btn-export-csv" href="#">{{.T.export_csv}}</a>
+                <a class="btn btn-outline" id="btn-print-report" href="#" target="_blank">{{.T.export_report}}</a>
+            </span>
+        </div>
+        <div class="panel">
+            <canvas id="cloudChart"></canvas>
+        </div>
+
+        <div class="section-title">{{.T.daily_totals}}</div>
+        <div class="panel">
+            <canvas id="dailyBarChart"></canvas>
+        </div>
+
+        <div class="section-title">{{.T.recent_activity}}</div>
+        <div class="panel">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{{.T.device}}</th>
+                        <th>{{.T.process}}</th>
+                        <th>{{.T.window_title}}</th>
+                        <th>{{.T.duration}}</th>
+                        <th>{{.T.when}}</th>
+                    </tr>
+                </thead>
+                <tbody id="cloud-recent-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ============ DEVICES (new: cross-device messaging by device_id) ============ -->
+    <div id="view-devices" class="dash-view" style="display:none;">
+        <div class="section-title">{{.T.devices_title}}</div>
+        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.devices_note}}</p>
+
+        <div id="devices-error"></div>
+
+        <div class="panel" style="margin-bottom:20px;">
+            <div id="devices-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
+
+            <form id="send-form" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <select id="target-device" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;"></select>
+                <select id="msg-kind" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
+                    <option value="message">{{.T.devices_kind_msg}}</option>
+                    <option value="data">{{.T.devices_kind_data}}</option>
+                </select>
+                <input id="msg-payload" type="text" placeholder="{{.T.devices_payload}}" style="flex:1;min-width:160px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
+                <button type="submit" class="btn">{{.T.devices_send}}</button>
+            </form>
+        </div>
+
+        <div class="section-title">{{.T.devices_inbox}}</div>
+        <div class="panel">
+            <ul id="devices-inbox" style="list-style:none;margin:0;padding:0;display:grid;gap:8px;"></ul>
+        </div>
+    </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        const THRESHOLDS = {
+            cpu: {{.DS.CPUThreshold}},
+            ram: {{.DS.RAMThreshold}},
+            disk: {{.DS.DiskThreshold}}
+        };
+
+        const LABELS = {
+            cpuHigh: {{json .T.alert_cpu_high}},
+            ramHigh: {{json .T.alert_ram_high}},
+            diskHigh: {{json .T.alert_disk_high}},
+            loginRequired: {{json .T.login_required}},
+            login: {{json .T.login}},
+            noDevices: {{json .T.devices_none}},
+            noMessages: {{json .T.devices_inbox_empty}}
+        };
+    </script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
+{{end}}

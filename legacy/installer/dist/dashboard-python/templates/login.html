@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="{{ dash_settings.language }}">
+<head>
+    <meta charset="UTF-8">
+    <title>JustInTime Dashboard - Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root { --app-font: {{ font_stack|safe }}; }
+    </style>
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-box">
+            <h1>&#9679; JustInTime</h1>
+
+            {% if error %}
+            <div class="error-banner">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('login') }}">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required autofocus>
+
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+
+                <button type="submit">Log In</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

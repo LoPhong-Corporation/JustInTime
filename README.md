@@ -1,4 +1,4 @@
-# JustInTime Client
+# JustInTime 
 
 > A lightweight native Windows activity monitoring agent written in C, C++, Python and Go (Python and Go are used for dashboard).
 
@@ -11,7 +11,7 @@
 ![Database](https://img.shields.io/badge/Database-SQLite-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-JustInTime Client is a high-performance Windows background agent that monitors user activity, records application usage locally using SQLite, and synchronizes data securely to the cloud through **Supabase Edge Functions**.
+JustInTime  is a high-performance Windows background agent that monitors user activity, records application usage locally using SQLite, and synchronizes data securely to the cloud through **Supabase Edge Functions**.
 
 The project follows an **offline-first** architecture, ensuring that activity data is never lost even when the device is temporarily offline.
 
@@ -141,40 +141,6 @@ If the network is unavailable, records remain safely stored in SQLite and will b
 
 ---
 
-# Project Structure
-
-```
-JustInTime-CLIENT/
-
-├── include/
-│   ├── activity.h
-│   ├── database.h
-│   ├── device.h
-│   ├── network.h
-│   ├── sync.h
-│   └── ...
-│
-├── src/
-│   ├── activity.c
-│   ├── database.c
-│   ├── device.c
-│   ├── network.c
-│   ├── sync.c
-│   └── main.c
-│
-├── third_party/
-│   └── sqlite/
-│
-├── docs/
-│
-├── assets/
-│
-├── CMakeLists.txt
-│
-└── README.md
-```
-
----
 
 # Database
 
@@ -234,6 +200,8 @@ And Python with Flask package, Psutil package (Recommend Python 3.13)
 ```bash
 pip install flask psutil
 ```
+
+**Note: In the future, the Python Dashboard will be replaced by Go Dashboarf for performance
 ---
 
 # Current Development Status
@@ -254,27 +222,6 @@ pip install flask psutil
 | Dashboard | ✅ |
 | Installer | ✅ |
 | Windows Service | ⏳ |
-
----
-
-# Future Ecosystem
-
-```
-JustInTime
-
-├── JustInTime-CLIENT
-│     Windows Agent
-│
-├── JustInTime-SERVER
-│     REST API
-│
-├── JustInTime-Dashboard
-│     Web Dashboard
-│
-├── JustInTime-Installer
-│
-└── Documentation
-```
 
 ---
 

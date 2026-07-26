@@ -1,0 +1,115 @@
+{{define "settings.html"}}
+<!DOCTYPE html>
+<html lang="{{.DS.Language}}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{.T.app_title}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root { --app-font: {{css .FontStack}}; }
+    </style>
+</head>
+<body>
+
+    <div class="app-shell">
+
+        <div class="sidebar no-print">
+            <div class="brand"><span class="dot"></span>JustInTime</div>
+            <nav>
+                <a href="/?view=overview" class="nav-link">&#9632; Overview</a>
+                <a href="/?view=cpu" class="nav-link">&#9632; CPU</a>
+                <a href="/?view=ram" class="nav-link">&#9632; RAM</a>
+                <a href="/?view=disk" class="nav-link">&#9632; Disk</a>
+                <a href="/?view=network" class="nav-link">&#9632; Network</a>
+                <a href="/?view=local" class="nav-link">&#9632; {{.T.nav_local}}</a>
+                <a href="/?view=cloud" class="nav-link">&#9632; {{.T.nav_cloud}}</a>
+                <a href="/?view=devices" class="nav-link">&#9632; {{.T.nav_devices}}</a>
+                <a href="/settings" class="nav-link active" style="margin-top:12px; border-top:1px solid #1c3a5e; padding-top:16px;">&#9632; {{.T.nav_settings}}</a>
+            </nav>
+        </div>
+
+        <div class="main-area">
+            <div class="topbar no-print">
+                <h1>{{.T.app_title}}</h1>
+                <div class="user-info">
+                    {{if .LoggedIn}}
+                        <span>{{.CurrentEmail}}</span>
+                        <a class="logout" href="/logout">{{.T.logout}}</a>
+                    {{else}}
+                        <span style="color:#f5a524;">{{.T.mode_offline}}</span>
+                        <a class="logout" style="color:#5aa9ff;border-color:#2f7de1;" href="/login">{{.T.login}}</a>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="container">
+
+    <h2 style="font-size:16px; text-transform:uppercase; letter-spacing:1.5px; color:#5aa9ff; margin-bottom:20px;">
+        {{.T.settings_title}}
+    </h2>
+
+    {{if .Extra.message}}
+    <div class="success-banner">{{.Extra.message}}</div>
+    {{end}}
+
+    {{if .Extra.error}}
+    <div class="error-banner">{{.Extra.error}}</div>
+    {{end}}
+
+    <div class="form-card">
+        <h3>{{.T.appearance}}</h3>
+        <form method="POST" action="/settings">
+            <input type="hidden" name="action" value="appearance">
+
+            <label>{{.T.font}}</label>
+            <select name="font">
+                <option value="mono" {{if eq .DS.Font "mono"}}selected{{end}}>{{.T.font_mono}}</option>
+                <option value="sans" {{if eq .DS.Font "sans"}}selected{{end}}>{{.T.font_sans}}</option>
+                <option value="serif" {{if eq .DS.Font "serif"}}selected{{end}}>{{.T.font_serif}}</option>
+            </select>
+
+            <label>{{.T.language}}</label>
+            <select name="language">
+                <option value="en" {{if eq .DS.Language "en"}}selected{{end}}>{{.T.lang_en}}</option>
+                <option value="vi" {{if eq .DS.Language "vi"}}selected{{end}}>{{.T.lang_vi}}</option>
+            </select>
+
+            <label>{{.T.cpu_threshold}}</label>
+            <input type="number" name="cpu_threshold" min="1" max="100" value="{{.DS.CPUThreshold}}">
+
+            <label>{{.T.ram_threshold}}</label>
+            <input type="number" name="ram_threshold" min="1" max="100" value="{{.DS.RAMThreshold}}">
+
+            <label>{{.T.disk_threshold}}</label>
+            <input type="number" name="disk_threshold" min="1" max="100" value="{{.DS.DiskThreshold}}">
+
+            <button type="submit" class="btn">{{.T.save}}</button>
+        </form>
+    </div>
+
+    <div class="form-card">
+        <h3>{{.T.change_password}}</h3>
+        {{if not .LoggedIn}}
+        <p style="color:#7e9ac0; font-size:13px;">{{.T.login_required}} <a href="/login">{{.T.login}}</a></p>
+        {{else}}
+        <form method="POST" action="/settings">
+            <input type="hidden" name="action" value="password">
+
+            <label>{{.T.new_password}}</label>
+            <input type="password" name="new_password" required minlength="6">
+
+            <label>{{.T.confirm_password}}</label>
+            <input type="password" name="confirm_password" required minlength="6">
+
+            <button type="submit" class="btn">{{.T.save}}</button>
+        </form>
+        {{end}}
+    </div>
+
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
+{{end}}

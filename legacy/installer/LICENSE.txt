@@ -1,0 +1,18 @@
+JustInTime - End User Notice
+=============================
+
+This build of JustInTime includes three components:
+
+1. The JustInTime Agent (C/C++, Qt) - tracks application usage locally
+   and optionally syncs it to your own Supabase project.
+2. A Python-based web dashboard (Flask) - optional, requires a local
+   Python installation.
+3. A Go-based local/offline dashboard - optional, a single self-
+   contained executable, no extra runtime required.
+
+Your activity data is stored locally on this machine at
+%APPDATA%\JustInTime and is only sent to the cloud if you explicitly
+log in and configure Supabase sync.
+
+Replace this file with your project's actual license text (MIT,
+Apache-2.0, proprietary, etc.) before distributing the installer.

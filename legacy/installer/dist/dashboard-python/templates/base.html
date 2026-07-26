@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="{{ dash_settings.language }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ t.app_title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root {
+            --app-font: {{ font_stack|safe }};
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+    <div class="app-shell">
+
+        <div class="sidebar no-print">
+            <div class="brand"><span class="dot"></span>JustInTime</div>
+            <nav>
+                <a href="{{ url_for('index') }}?view=overview" class="nav-link sidebar-view-link" data-view="overview">&#9632; Overview</a>
+                <a href="{{ url_for('index') }}?view=cpu" class="nav-link sidebar-view-link" data-view="cpu">&#9632; CPU</a>
+                <a href="{{ url_for('index') }}?view=ram" class="nav-link sidebar-view-link" data-view="ram">&#9632; RAM</a>
+                <a href="{{ url_for('index') }}?view=disk" class="nav-link sidebar-view-link" data-view="disk">&#9632; Disk</a>
+                <a href="{{ url_for('index') }}?view=network" class="nav-link sidebar-view-link" data-view="network">&#9632; Network</a>
+                <a href="{{ url_for('index') }}?view=cloud" class="nav-link sidebar-view-link" data-view="cloud">&#9632; {{ t.nav_cloud }}</a>
+                <a href="{{ url_for('settings_page') }}" class="nav-link {{ 'active' if active_page == 'settings' else '' }}" style="margin-top:12px; border-top:1px solid #1c3a5e; padding-top:16px;">&#9632; {{ t.nav_settings }}</a>
+            </nav>
+        </div>
+
+        <div class="main-area">
+            <div class="topbar no-print">
+                <h1>{{ t.app_title }}</h1>
+                <div class="user-info">
+                    <span>{{ current_email }}</span>
+                    <a class="logout" href="{{ url_for('logout') }}">{{ t.logout }}</a>
+                </div>
+            </div>
+
+            <div class="container">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

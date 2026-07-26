@@ -15,50 +15,68 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 add_executable(JustInTime WIN32
-        # ---- Lõi C (giữ nguyên logic gốc) ----
-        src/activity.c
-        include/activity.h
-        src/database.c
-        include/database.h
+        # ---- shared/ : dùng chung bởi cả vai trò agent (con) và parent ----
+        src/shared/auth.c
+        include/shared/auth.h
+        src/shared/network.c
+        include/shared/network.h
+        src/shared/jsonutil.c
+        include/shared/jsonutil.h
+        src/shared/device.c
+        include/shared/device.h
+        src/shared/settings.c
+        include/shared/settings.h
+        src/shared/backup.c
+        include/shared/backup.h
+        src/shared/database.c
+        include/shared/database.h
+        include/shared/config.h
+        include/shared/error_codes.h
+        src/shared/parentlink.c
+        include/shared/parentlink.h
+        src/shared/applimits.c
+        include/shared/applimits.h
+        src/shared/restclient.c
+        include/shared/restclient.h
         third_party/sqlite/sqlite3.c
         third_party/sqlite/sqlite3.h
-        src/device.c
-        include/device.h
-        src/sync.c
-        include/sync.h
-        include/config.h
-        include/network.h
-        src/network.c
-        src/jsonutil.c
-        include/jsonutil.h
-        src/backup.c
-        include/backup.h
-        src/settings.c
-        include/settings.h
-        src/auth.c
-        include/auth.h
-        include/error_codes.h
-        src/remoteview.c
-        include/remoteview.h
 
-        # ---- UI Qt (C++) ----
-        src/main.cpp
-        "include/trayicon.h"
-        src/trayicon.cpp
-        "include/logindialog.h"
-        src/logindialog.cpp
-        "include/settingsdialog.h"
-        src/settingsdialog.cpp
-        "include/supabasesetupdialog.h"
-        src/supabasesetupdialog.cpp
-        "include/remoteviewdialog.h"
-        src/remoteviewdialog.cpp
-        "include/updatechecker.h"
-        src/updatechecker.cpp
+        # ---- core/ : engine theo dõi hoạt động ----
+        src/core/activity.c
+        include/core/activity.h
+
+        # ---- agent/ : vai trò "con" (tray UI, sync, remote view, dialogs, entrypoint) ----
+        src/agent/main.cpp
+        "include/agent/trayicon.h"
+        src/agent/trayicon.cpp
+        "include/agent/logindialog.h"
+        src/agent/logindialog.cpp
+        "include/agent/settingsdialog.h"
+        src/agent/settingsdialog.cpp
+        "include/agent/supabasesetupdialog.h"
+        src/agent/supabasesetupdialog.cpp
+        "include/agent/remoteviewdialog.h"
+        src/agent/remoteviewdialog.cpp
+        "include/agent/updatechecker.h"
+        src/agent/updatechecker.cpp
+        include/agent/remoteview.h
+        src/agent/remoteview.c
+        include/agent/sync.h
+        src/agent/sync.c
+        "include/agent/parentlinkdialog.h"
+        src/agent/parentlinkdialog.cpp
+
+        # ---- parent/ : vai trò "phụ huynh" (xem dữ liệu con + đặt giới hạn) ----
+        "include/parent/parentdialog.h"
+        src/parent/parentdialog.cpp
 )
 
 include_directories(third_party)
 include_directories(include)
+include_directories(include/shared)
+include_directories(include/core)
+include_directories(include/agent)
+include_directories(include/parent)
 
 target_link_libraries(
         JustInTime
