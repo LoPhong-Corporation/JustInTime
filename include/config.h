@@ -14,7 +14,7 @@
  */
 #define APP_VERSION   "1.0.0"
 #define APP_PUBLISHER "LoPhong Corporation"
-#define APP_WEBSITE   "https://lonamphong.com"
+#define APP_WEBSITE   "https://example.com"
 
 #define SUPABASE_URL \
 "https://crdvfasjtrfrasqehwkc.supabase.co"
@@ -52,6 +52,6 @@
  * Số ngày giữ lại bản ghi ĐÃ đồng bộ trong DB local
  * trước khi dọn dẹp (không bao giờ xóa bản ghi chưa synced).
  */
-#define RETENTION_DAYS 100
+#define RETENTION_DAYS 30
 
 #endif

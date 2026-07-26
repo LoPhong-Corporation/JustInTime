@@ -35,6 +35,35 @@ typedef struct
 void monitor_activity(void);
 
 /*
+ * Gọi ngay khi phát hiện máy chuẩn bị khoá màn hình hoặc đi
+ * ngủ (sleep/hibernate) - xem main.cpp, bắt qua
+ * WM_WTSSESSION_CHANGE (WTS_SESSION_LOCK) và WM_POWERBROADCAST
+ * (PBT_APMSUSPEND).
+ *
+ * Chốt sổ record đang mở NGAY TẠI THỜI ĐIỂM NÀY (không đợi
+ * app đổi cửa sổ), rồi reset trạng thái theo dõi. Nhờ vậy,
+ * khi máy mở khoá/thức dậy - dù cửa sổ active lúc đó có trùng
+ * y hệt cửa sổ trước khi khoá - monitor_activity() vẫn luôn
+ * bắt đầu MỘT RECORD HOÀN TOÀN MỚI, thay vì merge cả khoảng
+ * thời gian khoá máy/ngủ vào thời lượng dùng app (đây chính là
+ * nguyên nhân gây ra các record duration_seconds bất thường lớn
+ * kiểu hàng chục phút/hàng giờ trong DB).
+ */
+void activity_suspend(void);
+
+/*
+ * Gọi khi máy mở khoá màn hình / thức dậy từ sleep (WM_WTSSESSION_CHANGE
+ * với WTS_SESSION_UNLOCK, hoặc WM_POWERBROADCAST với
+ * PBT_APMRESUMEAUTOMATIC/PBT_APMRESUMESUSPEND).
+ *
+ * Không bắt buộc phải gọi để logic hoạt động đúng (monitor_activity()
+ * tự bắt đầu phiên mới nhờ activity_suspend() đã reset trạng thái),
+ * nhưng vẫn expose ra để log rõ thời điểm resume và dự phòng mở
+ * rộng sau này (vd ghi nhận "khoảng gap" vào DB để hiển thị).
+ */
+void activity_resume(void);
+
+/*
  * Lấy snapshot activity đang diễn ra ngay lúc này
  * (process/title/thời điểm bắt đầu), thread-safe.
  * Dùng cho remote view - xem real-time không qua cloud.

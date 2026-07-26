@@ -10,6 +10,9 @@
 #include <QSystemTrayIcon>
 
 #include <windows.h>
+#include <wtsapi32.h>
+
+#pragma comment(lib, "Wtsapi32.lib")
 
 #include <cstdio>
 #include <ctime>
@@ -35,6 +38,132 @@ extern "C" {
 #include "trayicon.h"
 
 static std::atomic<bool> g_workerRunning{true};
+
+/*
+ * Cửa sổ ẩn (message-only, không hiện lên đâu cả, người dùng
+ * không bao giờ thấy) chỉ để nhận 2 loại thông báo hệ thống
+ * của Windows:
+ *
+ *   - WM_WTSSESSION_CHANGE (WTS_SESSION_LOCK/UNLOCK): máy khoá/
+ *     mở khoá màn hình. Cần gọi WTSRegisterSessionNotification()
+ *     lên 1 HWND cụ thể mới nhận được, không phải mọi window
+ *     đều tự động có.
+ *
+ *   - WM_POWERBROADCAST (PBT_APMSUSPEND/PBT_APMRESUMEAUTOMATIC/
+ *     PBT_APMRESUMESUSPEND): máy chuẩn bị ngủ (sleep/hibernate)
+ *     hoặc vừa thức dậy. Windows tự gửi message này cho MỌI
+ *     top-level window, không cần đăng ký riêng.
+ *
+ * Lý do dùng 1 window Win32 thuần (không phải QWidget) là để
+ * chắc chắn nhận được message ngay cả khi app không có bất kỳ
+ * QWidget nào đang hiện (đây là app chỉ chạy ở tray) - Qt vẫn
+ * bơm message cho window này bình thường vì nó dùng chung
+ * message loop chuẩn của Windows (GetMessage/DispatchMessage),
+ * không quan trọng window đó do Qt hay do ta tự tạo.
+ */
+static const wchar_t* kPowerEventClassName = L"JustInTimePowerEventWindowClass";
+static HWND g_powerEventWnd = nullptr;
+
+static LRESULT CALLBACK PowerEventWndProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+        case WM_WTSSESSION_CHANGE:
+            if (wParam == WTS_SESSION_LOCK)
+            {
+                activity_suspend();
+            }
+            else if (wParam == WTS_SESSION_UNLOCK)
+            {
+                activity_resume();
+            }
+            return 0;
+
+        case WM_POWERBROADCAST:
+            if (wParam == PBT_APMSUSPEND)
+            {
+                activity_suspend();
+            }
+            else if (
+                wParam == PBT_APMRESUMEAUTOMATIC ||
+                wParam == PBT_APMRESUMESUSPEND
+            )
+            {
+                activity_resume();
+            }
+            /*
+             * Theo MSDN: app nên trả về TRUE cho hầu hết các
+             * trường hợp WM_POWERBROADCAST, trừ khi chủ động
+             * từ chối 1 yêu cầu PBT_APMQUERYSUSPEND (ta không
+             * xử lý loại đó nên luôn trả TRUE).
+             */
+            return TRUE;
+
+        default:
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+}
+
+/*
+ * Tạo cửa sổ ẩn + đăng ký nhận thông báo khoá màn hình. Gọi
+ * 1 lần lúc khởi động app, trước khi vào vòng lặp sự kiện
+ * chính (app.exec()).
+ */
+static HWND createPowerEventWindow(void)
+{
+    WNDCLASSEXW wc = {};
+    wc.cbSize        = sizeof(WNDCLASSEXW);
+    wc.lpfnWndProc   = PowerEventWndProc;
+    wc.hInstance     = GetModuleHandleW(nullptr);
+    wc.lpszClassName = kPowerEventClassName;
+
+    RegisterClassExW(&wc);
+
+    HWND hwnd = CreateWindowExW(
+        0,
+        kPowerEventClassName,
+        L"",
+        0,
+        0, 0, 0, 0,
+        HWND_MESSAGE,
+        nullptr,
+        wc.hInstance,
+        nullptr
+    );
+
+    if (!hwnd)
+    {
+        wprintf(
+            L"[POWER] Khong tao duoc cua so nhan su kien khoa may/ngu (%lu) - "
+            L"tinh nang phat hien khoa man hinh/sleep se khong hoat dong.\n",
+            GetLastError()
+        );
+        return nullptr;
+    }
+
+    if (!WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION))
+    {
+        wprintf(
+            L"[POWER] WTSRegisterSessionNotification that bai (%lu) - "
+            L"van nhan duoc su kien sleep/resume, nhung khong nhan duoc "
+            L"su kien khoa/mo khoa man hinh.\n",
+            GetLastError()
+        );
+    }
+
+    return hwnd;
+}
+
+static void destroyPowerEventWindow(HWND hwnd)
+{
+    if (!hwnd)
+        return;
+
+    WTSUnRegisterSessionNotification(hwnd);
+    DestroyWindow(hwnd);
+    UnregisterClassW(kPowerEventClassName, GetModuleHandleW(nullptr));
+}
 
 /*
  * Worker thread: chạy vòng lặp theo dõi/sync/backup/báo cáo.
@@ -95,6 +224,13 @@ int main(int argc, char *argv[])
      * Login...) - app chỉ thoát khi bấm "Exit" trong tray.
      */
     app.setQuitOnLastWindowClosed(false);
+
+    /*
+     * Đăng ký nhận sự kiện khoá màn hình / sleep-resume của
+     * Windows càng sớm càng tốt, để không bỏ lỡ sự kiện nào
+     * xảy ra trong lúc app đang khởi động.
+     */
+    g_powerEventWnd = createPowerEventWindow();
 
     /*
      * Console debug: tạo sẵn nhưng ẩn mặc định, để mọi
@@ -165,6 +301,9 @@ int main(int argc, char *argv[])
     std::thread worker(workerLoop, &tray);
 
     int ret = app.exec();
+
+    destroyPowerEventWindow(g_powerEventWnd);
+    g_powerEventWnd = nullptr;
 
     /*
      * Thoát: dừng worker thread trước, join xong mới đụng

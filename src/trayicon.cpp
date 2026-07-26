@@ -108,7 +108,7 @@ TrayIcon::TrayIcon(QObject *parent) : QObject(parent)
     m_pythonDashboardAction->setToolTip(dashboardTip);
     m_goDashboardAction->setToolTip(dashboardTip);
 
-    m_debugAction = m_menu.addAction("Show debug console (DEVELOPER ONLY)", this, &TrayIcon::onToggleDebugConsole);
+    m_debugAction = m_menu.addAction("Show debug console", this, &TrayIcon::onToggleDebugConsole);
     //m_startWebSVAction = m_menu.addAction("Start Web Dashboard", this, &TrayIcon::onStartWebSVAction);
     m_debugAction->setCheckable(true);
 

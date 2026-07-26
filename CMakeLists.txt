@@ -12,7 +12,6 @@ set(CMAKE_AUTORCC ON)
 # Nếu CMake không tự tìm thấy Qt6, set CMAKE_PREFIX_PATH trỏ tới
 # thư mục cài Qt, ví dụ:
 #   -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64"
-set(CMAKE_PREFIX_PATH "C:/Qt/6.11.1/msvc2022_64")
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 add_executable(JustInTime WIN32
@@ -70,6 +69,7 @@ target_link_libraries(
         crypt32
         advapi32
         ws2_32
+        wtsapi32
 )
 
 # ------------------------------------------------------------------
