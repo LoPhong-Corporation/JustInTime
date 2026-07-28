@@ -16,13 +16,16 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"justintime-dashboard/internal/cloud"
 	"justintime-dashboard/internal/config"
+	"justintime-dashboard/internal/aiinsights"
 	"justintime-dashboard/internal/dashsession"
 	"justintime-dashboard/internal/dashsettings"
 	"justintime-dashboard/internal/i18n"
@@ -139,6 +142,7 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/api/local/summary", s.handleLocalSummary)
 	s.mux.HandleFunc("/api/local/recent", s.handleLocalRecent)
+	s.mux.HandleFunc("/api/local/insights", s.handleLocalInsights)
 
 	s.mux.HandleFunc("/api/devices", s.handleDevices)
 	s.mux.HandleFunc("/api/inbox", s.handleInbox)
@@ -566,6 +570,46 @@ func (s *Server) handleLocalRecent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"mode": "local", "recent": recent})
 }
 
+// handleLocalInsights is the small, on-demand "AI" feature: it sends
+// the last 7 days of local app-usage totals (nothing else — no window
+// titles, no timestamps) to the Anthropic API and returns a summary,
+// a category per app, and a few supportive recommendations. This only
+// runs when the person clicks the button; it is never called
+// automatically or on a schedule.
+func (s *Server) handleLocalInsights(w http.ResponseWriter, r *http.Request) {
+	ds := dashsettings.Load()
+
+	apiKey := ds.AnthropicAPIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("ANTHROPIC_API_KEY")
+	}
+	if apiKey == "" {
+		writeErr(w, http.StatusBadRequest, "Add your Anthropic API key in Settings > AI Insights first.")
+		return
+	}
+
+	usage, err := s.db.Usage(7)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if len(usage) == 0 {
+		writeErr(w, http.StatusServiceUnavailable, "Not enough local activity data yet.")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	insights, err := aiinsights.Generate(ctx, apiKey, usage)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	writeJSON(w, insights)
+}
+
 // ---------------------------------------------------------------------
 // Device-to-device messaging API — new, has no Python equivalent.
 // Only ever relayed through Supabase; never a direct connection.
@@ -977,6 +1021,13 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 				data.Extra["message"] = data.T["password_changed"]
 			}
 		}
+
+	case "ai_key":
+		ds := dashsettings.Load()
+		ds.AnthropicAPIKey = strings.TrimSpace(r.FormValue("anthropic_api_key"))
+		_ = dashsettings.Save(ds)
+		data = s.basePageData("settings")
+		data.Extra["message"] = data.T["save_success"]
 	}
 
 	s.render(w, "settings.html", data)

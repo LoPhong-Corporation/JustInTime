@@ -20,6 +20,11 @@ type Settings struct {
 	CPUThreshold  int    `json:"cpu_threshold"`
 	RAMThreshold  int    `json:"ram_threshold"`
 	DiskThreshold int    `json:"disk_threshold"`
+
+	// Only ever sent to api.anthropic.com when the user explicitly
+	// clicks "Generate Insights" on the Local Activity tab — never
+	// used automatically, never sent anywhere else.
+	AnthropicAPIKey string `json:"anthropic_api_key"`
 }
 
 func Defaults() Settings {
@@ -69,6 +74,9 @@ func Load() Settings {
 	}
 	if v, ok := data["disk_threshold"]; ok {
 		_ = json.Unmarshal(v, &out.DiskThreshold)
+	}
+	if v, ok := data["anthropic_api_key"]; ok {
+		_ = json.Unmarshal(v, &out.AnthropicAPIKey)
 	}
 	return out
 }

@@ -334,10 +334,13 @@ int db_build_daily_summary_text(
     time_t day_start = mktime(&today);
 
     const char* sql =
-        "SELECT process_name, SUM(duration_seconds) as total "
-        "FROM activity_logs "
-        "WHERE start_time >= ? "
-        "GROUP BY process_name "
+        "SELECT a1.process_name, SUM(a1.duration_seconds) as total, "
+        "  (SELECT a2.window_title FROM activity_logs a2 "
+        "   WHERE a2.process_name = a1.process_name AND a2.start_time >= ? "
+        "   ORDER BY a2.start_time DESC LIMIT 1) as last_title "
+        "FROM activity_logs a1 "
+        "WHERE a1.start_time >= ? "
+        "GROUP BY a1.process_name "
         "ORDER BY total DESC "
         "LIMIT 15;";
 
@@ -360,6 +363,12 @@ int db_build_daily_summary_text(
         (sqlite3_int64)day_start
     );
 
+    sqlite3_bind_int64(
+        stmt,
+        2,
+        (sqlite3_int64)day_start
+    );
+
     int has_row = 0;
     int pos = 0;
 
@@ -373,6 +382,9 @@ int db_build_daily_summary_text(
         long long total_seconds =
             sqlite3_column_int64(stmt, 1);
 
+        const char* title_utf8 =
+            (const char*)sqlite3_column_text(stmt, 2);
+
         wchar_t process_wide[512] = {0};
 
         utf8_to_wide(
@@ -381,19 +393,58 @@ int db_build_daily_summary_text(
             512
         );
 
+        /*
+         * Tiêu đề cửa sổ gần nhất của process này hôm nay (có
+         * thể NULL nếu record cũ chưa lưu window_title) - cắt
+         * bớt nếu quá dài để dòng báo cáo không bị vỡ layout.
+         */
+        wchar_t title_wide[512] = {0};
+
+        utf8_to_wide(
+            title_utf8,
+            title_wide,
+            512
+        );
+
+        if (wcslen(title_wide) > 50)
+        {
+            title_wide[47] = L'.';
+            title_wide[48] = L'.';
+            title_wide[49] = L'.';
+            title_wide[50] = L'\0';
+        }
+
         long hours   = (long)(total_seconds / 3600);
         long minutes = (long)((total_seconds % 3600) / 60);
         long seconds = (long)(total_seconds % 60);
 
-        int written = swprintf(
-            out + pos,
-            out_size - pos,
-            L"%-28ls %02ld:%02ld:%02ld\n",
-            process_wide,
-            hours,
-            minutes,
-            seconds
-        );
+        int written;
+
+        if (title_wide[0] != L'\0')
+        {
+            written = swprintf(
+                out + pos,
+                out_size - pos,
+                L"%-28ls %02ld:%02ld:%02ld  - %ls\n",
+                process_wide,
+                hours,
+                minutes,
+                seconds,
+                title_wide
+            );
+        }
+        else
+        {
+            written = swprintf(
+                out + pos,
+                out_size - pos,
+                L"%-28ls %02ld:%02ld:%02ld\n",
+                process_wide,
+                hours,
+                minutes,
+                seconds
+            );
+        }
 
         if (written < 0)
             break;

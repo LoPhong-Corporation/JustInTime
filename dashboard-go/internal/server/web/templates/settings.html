@@ -106,6 +106,19 @@
         {{end}}
     </div>
 
+    <div class="form-card">
+        <h3>{{.T.ai_insights_title}}</h3>
+        <p style="color:#7e9ac0; font-size:13px;">{{.T.ai_insights_note}}</p>
+        <form method="POST" action="/settings">
+            <input type="hidden" name="action" value="ai_key">
+
+            <label>{{.T.ai_insights_key_label}}</label>
+            <input type="password" name="anthropic_api_key" placeholder="sk-ant-..." value="{{.DS.AnthropicAPIKey}}" autocomplete="off">
+
+            <button type="submit" class="btn">{{.T.save}}</button>
+        </form>
+    </div>
+
             </div>
         </div>
     </div>

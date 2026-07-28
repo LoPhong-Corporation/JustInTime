@@ -137,7 +137,7 @@ grant execute on function public.find_user_id_by_email(text) to authenticated;
 
 create or replace function public.parent_links_for_parent()
 returns table (
-    id serial,
+    id bigint,
     child_user_id uuid,
     child_email text,
     status text,
@@ -161,7 +161,7 @@ grant execute on function public.parent_links_for_parent() to authenticated;
 
 create or replace function public.parent_links_for_child()
 returns table (
-    id serial,
+    id bigint,
     parent_user_id uuid,
     parent_email text,
     status text,

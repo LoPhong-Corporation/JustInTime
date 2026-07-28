@@ -717,6 +717,11 @@ async function loadFamilyChildren() {
         const res = await fetch('/api/parent/children');
         const data = await res.json();
 
+        if (data.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+            return;
+        }
+
         if (!data.logged_in) {
             errorDiv.innerHTML = `<div class="error-banner">${LABELS.loginRequired} — <a href="/login">${LABELS.login}</a></div>`;
             return;
@@ -904,6 +909,11 @@ async function loadFamilyParents() {
         const res = await fetch('/api/parent/parents');
         const data = await res.json();
 
+        if (data.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+            return;
+        }
+
         if (!data.logged_in) {
             errorDiv.innerHTML = `<div class="error-banner">${LABELS.loginRequired} — <a href="/login">${LABELS.login}</a></div>`;
             return;
@@ -931,3 +941,50 @@ async function loadFamilyParents() {
         errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
     }
 }
+
+// ---------------- AI Insights (on-demand, opt-in) ----------------
+
+document.getElementById('btn-generate-insights')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-generate-insights');
+    const errorDiv = document.getElementById('insights-error');
+    const loadingDiv = document.getElementById('insights-loading');
+    const resultDiv = document.getElementById('insights-result');
+
+    errorDiv.innerHTML = '';
+    resultDiv.style.display = 'none';
+    loadingDiv.style.display = 'block';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/local/insights');
+        const data = await res.json();
+
+        loadingDiv.style.display = 'none';
+        btn.disabled = false;
+
+        if (data.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+            return;
+        }
+
+        document.getElementById('insights-summary').textContent = data.summary || '';
+
+        const appsBody = document.getElementById('insights-apps-body');
+        appsBody.innerHTML = (data.apps || []).map(a => `
+            <tr>
+                <td>${a.process_name}</td>
+                <td>${a.category}</td>
+                <td>${a.note || ''}</td>
+            </tr>
+        `).join('');
+
+        const recList = document.getElementById('insights-recommendations');
+        recList.innerHTML = (data.recommendations || []).map(r => `<li>${r}</li>`).join('');
+
+        resultDiv.style.display = 'block';
+    } catch (e) {
+        loadingDiv.style.display = 'none';
+        btn.disabled = false;
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+});
