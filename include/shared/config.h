@@ -12,7 +12,7 @@
  * phát hành bản mới, khớp với cột "version" bạn thêm vào
  * bảng app_releases.
  */
-#define APP_VERSION   "1.0.1"
+#define APP_VERSION   "1.0.1 pre-release"
 #define APP_PUBLISHER "LoPhong Corporation"
 #define APP_WEBSITE   "https://lonamphong.com"
 

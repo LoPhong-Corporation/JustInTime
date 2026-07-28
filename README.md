@@ -1,11 +1,10 @@
 # JustInTime 
 
-> A lightweight native Windows activity monitoring agent written in C, C++, Python and Go (Python and Go are used for dashboard).
+> A lightweight native Windows activity monitoring agent written in C, C++, Go.
 
 ![Platform](https://img.shields.io/badge/Platform-Windows-blue)
 ![Language](https://img.shields.io/badge/Language-C-success)
 ![Language](https://img.shields.io/badge/Language-C++-success)
-![Language](https://img.shields.io/badge/Language-Python-success)
 ![Language](https://img.shields.io/badge/Language-Go-success)
 ![Compiler](https://img.shields.io/badge/Compiler-MSVC-purple)
 ![Database](https://img.shields.io/badge/Database-SQLite-orange)
@@ -35,19 +34,6 @@ The project follows an **offline-first** architecture, ensuring that activity da
 - Offline queue
 - Automatic synchronization
 - Unsynced record management
-
----
-
-## Work In Progress
-- Building API connection between Dashboard and JustInTime Agent
-
----
-
-## Planned
-
-- Background Worker
-- Multi-device synchronization
-- Automatic Update
 
 ---
 
@@ -141,25 +127,6 @@ If the network is unavailable, records remain safely stored in SQLite and will b
 
 ---
 
-
-# Database
-
-Current local database table
-
-| Column | Type |
-|---------|------|
-| id | INTEGER |
-| device_id | TEXT |
-| process_name | TEXT |
-| window_title | TEXT |
-| duration_seconds | INTEGER |
-| start_time | INTEGER |
-| end_time | INTEGER |
-| synced | INTEGER |
-| created_at | DATETIME |
-
----
-
 # Technologies
 
 - C17
@@ -201,29 +168,9 @@ And Python with Flask package, Psutil package (Recommend Python 3.13)
 pip install flask psutil
 ```
 
-**Note: In the future, the Python Dashboard will be replaced by Go Dashboarf for performance
+**Note: In the future, the Python Dashboard will be replaced by Go Dashboard for performance
 ---
 
-# Current Development Status
-
-| Module | Status |
-|---------|:------:|
-| Activity Monitor | ✅ |
-| SQLite Database | ✅ |
-| Unicode Support | ✅ |
-| Device ID | ✅ |
-| JSON Serialization | ✅ |
-| HTTP Client | ✅ |
-| Sync Engine | ✅ |
-| Supabase Edge Functions | ✅ |
-| Offline Queue | ✅ |
-| Retry Queue | ✅ |
-| Configuration | ✅ |
-| Dashboard | ✅ |
-| Installer | ✅ |
-| Windows Service | ⏳ |
-
----
 
 # Documentation
 
@@ -257,3 +204,6 @@ See the [LICENSE](LICENSE) file for more information.
 
 
 **Made with ❤️ by LoPhong Corporation**
+
+
+After 1.0.1, we stop support for Python dashboard and move to Go dashboard. 
