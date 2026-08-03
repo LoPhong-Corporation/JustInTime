@@ -65,9 +65,27 @@ function showToast(message) {
     setTimeout(() => toast.remove(), 6000);
 }
 
+const alertsLog = [];
+
+function logAlert(label) {
+    alertsLog.unshift({ label, time: new Date() });
+    if (alertsLog.length > 20) alertsLog.pop();
+
+    const list = document.getElementById('alerts-log');
+    if (!list) return;
+
+    list.innerHTML = alertsLog.map(a => `
+        <li style="background:#000; border:1px solid #1c3a5e; border-radius:8px; padding:8px 12px; font-size:13px; display:flex; justify-content:space-between; gap:12px;">
+            <span>⚠️ ${a.label}</span>
+            <span style="color:#4a6584; white-space:nowrap;">${a.time.toLocaleTimeString()}</span>
+        </li>
+    `).join('');
+}
+
 function checkAlert(key, isOver, label) {
     if (isOver && !alertState[key]) {
         showToast(label);
+        logAlert(label);
     }
     alertState[key] = isOver;
 }
@@ -313,6 +331,192 @@ document.getElementById('global-search')?.addEventListener('input', (e) => {
 
 loadProcesses();
 setInterval(loadProcesses, 4000);
+
+// ---------------- Machines (fleet overview via device_heartbeats) ----------------
+
+function machineStatus(m) {
+    const ageSec = (Date.now() - new Date(m.last_seen).getTime()) / 1000;
+    if (ageSec > 90) return 'offline';
+
+    const cpu = m.cpu_percent || 0, ram = m.ram_percent || 0, disk = m.disk_percent || 0;
+    const critical = cpu >= (THRESHOLDS.cpu || 85) || ram >= (THRESHOLDS.ram || 85) || disk >= (THRESHOLDS.disk || 90);
+    if (critical) return 'critical';
+
+    const warning = cpu >= (THRESHOLDS.cpu || 85) - 10 || ram >= (THRESHOLDS.ram || 85) - 10 || disk >= (THRESHOLDS.disk || 90) - 10;
+    if (warning) return 'warning';
+
+    return 'online';
+}
+
+function timeAgo(iso) {
+    const sec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (sec < 60) return `${sec}s ago`;
+    if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+    return `${Math.round(sec / 3600)}h ago`;
+}
+
+async function loadMachines() {
+    const errorDiv = document.getElementById('machines-error');
+    const listEl = document.getElementById('machines-list');
+    errorDiv.innerHTML = '';
+
+    try {
+        const res = await fetch('/api/machines');
+        const data = await res.json();
+
+        if (data.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+            setFleetCounts({ online: 0, offline: 0, warning: 0, critical: 0 });
+            return;
+        }
+        if (!data.logged_in) {
+            errorDiv.innerHTML = `<div class="error-banner">${LABELS.loginRequired} — <a href="/login">${LABELS.login}</a></div>`;
+            listEl.innerHTML = `<p style="color:#4a6584;">Log in to see every machine on your account here.</p>`;
+            setFleetCounts({ online: 0, offline: 0, warning: 0, critical: 0 });
+            return;
+        }
+
+        const machines = data.machines || [];
+        const counts = { online: 0, offline: 0, warning: 0, critical: 0 };
+
+        if (!machines.length) {
+            listEl.innerHTML = `<p style="color:#4a6584;">No machines have reported in yet — this device will appear here shortly.</p>`;
+        } else {
+            listEl.innerHTML = machines.map(m => {
+                const status = machineStatus(m);
+                counts[status]++;
+                const isSelf = m.device_id === data.self_device_id;
+
+                return `
+                    <div class="machine-card">
+                        <div>
+                            <div class="machine-name">${m.hostname || m.device_id}${isSelf ? ' (this device)' : ''}</div>
+                            <div class="machine-sub">${m.device_id} — ${timeAgo(m.last_seen)}</div>
+                        </div>
+                        <div><span class="status-pill ${status}"><span class="dot"></span>${status}</span></div>
+                        <div>
+                            <div class="machine-metric-label">CPU</div>
+                            <div class="machine-metric-value">${(m.cpu_percent || 0).toFixed(0)}%</div>
+                            <div class="mini-bar"><div class="mini-bar-fill" style="width:${m.cpu_percent || 0}%; background:${gaugeColor(m.cpu_percent || 0, THRESHOLDS.cpu)}"></div></div>
+                        </div>
+                        <div>
+                            <div class="machine-metric-label">RAM</div>
+                            <div class="machine-metric-value">${(m.ram_percent || 0).toFixed(0)}%</div>
+                            <div class="mini-bar"><div class="mini-bar-fill" style="width:${m.ram_percent || 0}%; background:${gaugeColor(m.ram_percent || 0, THRESHOLDS.ram)}"></div></div>
+                        </div>
+                        <div>
+                            <div class="machine-metric-label">Disk</div>
+                            <div class="machine-metric-value">${(m.disk_percent || 0).toFixed(0)}%</div>
+                            <div class="mini-bar"><div class="mini-bar-fill" style="width:${m.disk_percent || 0}%; background:${gaugeColor(m.disk_percent || 0, THRESHOLDS.disk)}"></div></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        setFleetCounts(counts);
+    } catch (e) {
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+}
+
+function setFleetCounts(counts) {
+    setText('fleet-online-count', counts.online);
+    setText('fleet-offline-count', counts.offline);
+    setText('fleet-warning-count', counts.warning);
+    setText('fleet-critical-count', counts.critical);
+}
+
+loadMachines();
+setInterval(loadMachines, 30000);
+
+// ---------------- Activity Timeline (this device, local) ----------------
+
+async function loadActivityTimeline() {
+    const el = document.getElementById('activity-timeline');
+    if (!el) return;
+
+    try {
+        const res = await fetch('/api/local/recent');
+        const data = await res.json();
+        const recent = (data.recent || []).slice(0, 10);
+
+        if (!recent.length) {
+            el.innerHTML = `<p style="color:#4a6584; font-size:13px;">No local activity recorded yet.</p>`;
+            return;
+        }
+
+        el.innerHTML = recent.map(a => `
+            <div class="timeline-item">
+                <div class="timeline-time">${new Date(a.start_time * 1000).toLocaleString()}</div>
+                <div class="timeline-title">${a.process_name}</div>
+                <div class="timeline-sub">${(a.window_title || '').substring(0, 70)} — ${fmtDuration(a.duration_seconds)}</div>
+            </div>
+        `).join('');
+    } catch (e) {
+        el.innerHTML = `<p style="color:#4a6584; font-size:13px;">Could not load activity timeline.</p>`;
+    }
+}
+
+loadActivityTimeline();
+setInterval(loadActivityTimeline, 30000);
+
+// ---------------- Agent / Service Status ----------------
+
+async function loadAgentStatus() {
+    const el = document.getElementById('agent-status-body');
+    if (!el) return;
+
+    try {
+        const res = await fetch('/api/local/recent');
+        const data = await res.json();
+        const recent = data.recent || [];
+
+        let agentRow;
+        if (recent.length > 0) {
+            const mostRecentEnd = recent[0].end_time || recent[0].start_time;
+            const ageSec = (Date.now() / 1000) - mostRecentEnd;
+            const isActive = ageSec < 300; // 5 phút
+
+            agentRow = `
+                <div class="agent-status-row">
+                    <span class="label">Local tracking (agent.exe)</span>
+                    <span class="value"><span class="status-pill ${isActive ? 'online' : 'warning'}"><span class="dot"></span>${isActive ? 'Active' : 'Idle'}</span></span>
+                </div>
+                <div class="agent-status-row">
+                    <span class="label">Last record written</span>
+                    <span class="value">${timeAgo(new Date(mostRecentEnd * 1000).toISOString())}</span>
+                </div>
+            `;
+        } else {
+            agentRow = `
+                <div class="agent-status-row">
+                    <span class="label">Local tracking (agent.exe)</span>
+                    <span class="value"><span class="status-pill offline"><span class="dot"></span>No data</span></span>
+                </div>
+            `;
+        }
+
+        const statusRes = await fetch('/api/auth/status');
+        const statusData = await statusRes.json();
+
+        el.innerHTML = agentRow + `
+            <div class="agent-status-row">
+                <span class="label">Dashboard mode</span>
+                <span class="value">${statusData.logged_in ? 'Online (cloud sync)' : 'Offline (local only)'}</span>
+            </div>
+            <div class="agent-status-row">
+                <span class="label">Device ID</span>
+                <span class="value">${DEVICE_ID || '—'}</span>
+            </div>
+        `;
+    } catch (e) {
+        el.innerHTML = `<div class="agent-status-row"><span class="label">Could not load status</span><span class="value"></span></div>`;
+    }
+}
+
+loadAgentStatus();
+setInterval(loadAgentStatus, 15000);
 
 // ---------------- SSE: realtime system stats ----------------
 

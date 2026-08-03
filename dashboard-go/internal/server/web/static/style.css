@@ -703,3 +703,132 @@ canvas { max-height: 320px; }
         color: #000;
     }
 }
+
+/* ============================================================
+   Overview redesign: fleet status row, Machines list, timeline,
+   agent status card, quick actions.
+   ============================================================ */
+
+.fleet-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.fleet-card {
+    background: #0c1c33;
+    border: 1px solid #1c3a5e;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.fleet-card .fleet-count { font-size: 24px; font-weight: 700; color: #eef4fb; line-height: 1; }
+.fleet-card .fleet-label { font-size: 12px; color: #7e9ac0; margin-top: 2px; }
+.fleet-card .fleet-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.fleet-card.online .fleet-dot  { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+.fleet-card.offline .fleet-dot { background: #4a6584; }
+.fleet-card.warning .fleet-dot { background: #f5a524; box-shadow: 0 0 8px #f5a524; }
+.fleet-card.critical .fleet-dot{ background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+.status-pill .dot { width: 7px; height: 7px; border-radius: 50%; }
+.status-pill.online   { background: rgba(34,197,94,0.15);  color: #22c55e; }
+.status-pill.online .dot   { background: #22c55e; }
+.status-pill.offline  { background: rgba(74,101,132,0.2);  color: #7e9ac0; }
+.status-pill.offline .dot  { background: #4a6584; }
+.status-pill.warning  { background: rgba(245,165,36,0.15); color: #f5a524; }
+.status-pill.warning .dot  { background: #f5a524; }
+.status-pill.critical { background: rgba(239,68,68,0.15);  color: #ef4444; }
+.status-pill.critical .dot { background: #ef4444; }
+
+.machine-card {
+    background: #000;
+    border: 1px solid #1c3a5e;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: 1.4fr 0.7fr 1fr 1fr 1fr;
+    gap: 14px;
+    align-items: center;
+}
+.machine-card .machine-name { font-weight: 700; color: #eef4fb; font-size: 14px; }
+.machine-card .machine-sub { font-size: 11px; color: #4a6584; margin-top: 2px; }
+.machine-card .machine-metric-label { font-size: 10px; color: #7e9ac0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.machine-card .machine-metric-value { font-size: 13px; color: #dce8f7; margin-bottom: 4px; }
+
+.mini-bar { background: #0b0d18; border-radius: 6px; height: 6px; overflow: hidden; }
+.mini-bar-fill { height: 100%; border-radius: 6px; }
+
+.timeline {
+    position: relative;
+    padding-left: 22px;
+    border-left: 2px solid #1c3a5e;
+}
+.timeline-item {
+    position: relative;
+    padding-bottom: 16px;
+}
+.timeline-item:last-child { padding-bottom: 0; }
+.timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -28px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2f7de1;
+    border: 2px solid #0c1c33;
+}
+.timeline-item .timeline-time { font-size: 11px; color: #4a6584; }
+.timeline-item .timeline-title { font-size: 13px; color: #eef4fb; font-weight: 600; margin: 2px 0; }
+.timeline-item .timeline-sub { font-size: 12px; color: #7e9ac0; }
+
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+}
+.quick-action-btn {
+    background: #0c1c33;
+    border: 1px solid #1c3a5e;
+    border-radius: 10px;
+    padding: 14px;
+    color: #dce8f7;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color 0.15s, background 0.15s;
+}
+.quick-action-btn:hover { border-color: #2f7de1; background: #0f2338; }
+.quick-action-btn .qa-icon { font-size: 18px; }
+
+.agent-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #1c3a5e;
+}
+.agent-status-row:last-child { border-bottom: none; }
+.agent-status-row .label { color: #7e9ac0; font-size: 13px; }
+.agent-status-row .value { color: #eef4fb; font-size: 13px; font-weight: 600; }

@@ -76,8 +76,8 @@ var translations = map[string]map[string]string{
 		// the user's own Anthropic API key, only used when they click
 		// the button).
 		"ai_insights_title":     "AI Insights",
-		"ai_insights_note":      "Optional. Add your own Anthropic API key to get an AI-generated summary, app categories, and a few suggestions based on your last 7 days of local activity. Nothing is sent anywhere unless you click \"Generate Insights\" — this key is stored locally in dashboard_settings.json, never on any server of ours.",
-		"ai_insights_key_label": "Anthropic API key",
+		"ai_insights_note":      "Optional. Add your own free Gemini API key (from ai.google.dev) to get an AI-generated summary, app categories, and a few suggestions based on your last 7 days of activity — from this device or from your Supabase cloud sync, your choice. Nothing is sent anywhere unless you click \"Generate Insights\" — this key is stored locally in dashboard_settings.json, never on any server of ours.",
+		"ai_insights_key_label": "Gemini API key",
 		"ai_insights_generate":  "Generate Insights",
 		"ai_insights_generating": "Analyzing your last 7 days...",
 		"ai_insights_summary":   "Summary",
@@ -85,6 +85,8 @@ var translations = map[string]map[string]string{
 		"ai_insights_recommendations": "Suggestions",
 		"ai_insights_no_key":    "Add your Anthropic API key in Settings first.",
 		"ai_insights_empty":     "Not enough local activity data yet — use the app for a bit, then try again.",
+		"ai_insights_source_local": "This device (local)",
+		"ai_insights_source_cloud": "All devices (cloud)",
 
 		// New: cross-device messaging tab.
 		"devices_title":       "Other Devices",
@@ -203,8 +205,8 @@ var translations = map[string]map[string]string{
 		"local_note":       "Luôn khả dụng kể cả khi không có mạng — đọc trực tiếp từ database của máy này.",
 
 		"ai_insights_title":     "AI Phân Tích",
-		"ai_insights_note":      "Tuỳ chọn. Thêm API key Anthropic của riêng bạn để nhận tóm tắt bằng AI, phân loại ứng dụng, và vài gợi ý dựa trên 7 ngày hoạt động cục bộ gần nhất. Không có gì được gửi đi cho tới khi bạn bấm \"Tạo Phân Tích\" — key này chỉ lưu cục bộ trong dashboard_settings.json, không lưu trên bất kỳ server nào của chúng tôi.",
-		"ai_insights_key_label": "Anthropic API key",
+		"ai_insights_note":      "Tuỳ chọn. Thêm API key Gemini miễn phí của riêng bạn (lấy tại ai.google.dev) để nhận tóm tắt bằng AI, phân loại ứng dụng, và vài gợi ý dựa trên 7 ngày hoạt động gần nhất — từ máy này hoặc từ dữ liệu đồng bộ cloud Supabase, tuỳ bạn chọn. Không có gì được gửi đi cho tới khi bạn bấm \"Tạo Phân Tích\" — key này chỉ lưu cục bộ trong dashboard_settings.json, không lưu trên bất kỳ server nào của chúng tôi.",
+		"ai_insights_key_label": "Gemini API key",
 		"ai_insights_generate":  "Tạo Phân Tích",
 		"ai_insights_generating": "Đang phân tích 7 ngày gần nhất...",
 		"ai_insights_summary":   "Tóm Tắt",
@@ -212,6 +214,8 @@ var translations = map[string]map[string]string{
 		"ai_insights_recommendations": "Gợi Ý",
 		"ai_insights_no_key":    "Thêm API key Anthropic trong Cài đặt trước.",
 		"ai_insights_empty":     "Chưa đủ dữ liệu hoạt động cục bộ — dùng app thêm một chút rồi thử lại.",
+		"ai_insights_source_local": "Máy này (cục bộ)",
+		"ai_insights_source_cloud": "Mọi thiết bị (cloud)",
 
 		"devices_title":       "Thiết Bị Khác",
 		"devices_note":        "Cần có mạng và đã đăng nhập. Tin nhắn/dữ liệu được chuyển tiếp qua Supabase — ứng dụng không bao giờ kết nối trực tiếp tới máy khác.",

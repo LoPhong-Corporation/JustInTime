@@ -659,3 +659,99 @@ func (c *Client) ActivityLogsForChild(ctx context.Context, childUserID string, s
 	}
 	return out, nil
 }
+
+// ---------------------------------------------------------------------
+// Device heartbeats (see migrations/005_device_heartbeats.sql). Every
+// device running this dashboard, while logged in, upserts its own row
+// every ~30s (see server.go's heartbeat loop). This is what powers the
+// multi-machine Overview/Machines list and "connection between 2
+// machines" — two devices on the same account simply see each other
+// here, still entirely relayed through Supabase, never a direct
+// machine-to-machine connection.
+// ---------------------------------------------------------------------
+
+type DeviceHeartbeat struct {
+	DeviceID    string  `json:"device_id"`
+	Hostname    string  `json:"hostname"`
+	CPUPercent  float64 `json:"cpu_percent"`
+	RAMPercent  float64 `json:"ram_percent"`
+	DiskPercent float64 `json:"disk_percent"`
+	LastSeen    string  `json:"last_seen"`
+}
+
+// PushHeartbeat upserts this device's current status. user_id defaults
+// to auth.uid() server-side (see migration), so the client never needs
+// to know its own user id for this call.
+func (c *Client) PushHeartbeat(ctx context.Context, deviceID, hostname string, cpu, ram, disk float64) error {
+	body, err := json.Marshal(map[string]any{
+		"device_id":    deviceID,
+		"hostname":     hostname,
+		"cpu_percent":  cpu,
+		"ram_percent":  ram,
+		"disk_percent": disk,
+		"last_seen":    time.Now().UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.request(ctx, http.MethodPost,
+		"/rest/v1/device_heartbeats?on_conflict=user_id,device_id",
+		body, map[string]string{"Prefer": "resolution=merge-duplicates,return=minimal"})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return readErr(resp)
+}
+
+// ListHeartbeats returns every device heartbeat on this account
+// (i.e. every machine running the dashboard, logged in, sorted most
+// recently seen first) — the "Machines" list.
+func (c *Client) ListHeartbeats(ctx context.Context) ([]DeviceHeartbeat, error) {
+	resp, err := c.request(ctx, http.MethodGet,
+		"/rest/v1/device_heartbeats?select=*&order=last_seen.desc", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readErr(resp)
+	}
+
+	var out []DeviceHeartbeat
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListHeartbeatsForChild returns heartbeats for a specific child
+// account (only succeeds for a parent approved for that child — RLS).
+func (c *Client) ListHeartbeatsForChild(ctx context.Context, childUserID string) ([]DeviceHeartbeat, error) {
+	path := fmt.Sprintf(
+		"/rest/v1/device_heartbeats?select=*&user_id=eq.%s&order=last_seen.desc",
+		url.QueryEscape(childUserID),
+	)
+
+	resp, err := c.request(ctx, http.MethodGet, path, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readErr(resp)
+	}
+
+	var out []DeviceHeartbeat
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

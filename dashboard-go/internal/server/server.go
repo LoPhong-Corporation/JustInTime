@@ -106,7 +106,45 @@ func New(cfg *config.Config, db *localdb.DB) *Server {
 
 	s.mux = http.NewServeMux()
 	s.routes()
+
+	go s.heartbeatLoop()
+
 	return s
+}
+
+// heartbeatLoop pushes this device's own CPU/RAM/Disk + a "last seen"
+// timestamp to Supabase every 30s, but only while logged in (silently
+// does nothing otherwise — this never blocks or slows down the rest
+// of the dashboard). This is the only thing that makes the Machines
+// list / Overview Online-Offline status possible: two devices on the
+// same account simply see each other's heartbeat rows here, still
+// entirely relayed through Supabase — never a direct connection.
+func (s *Server) heartbeatLoop() {
+	hostname, _ := os.Hostname()
+
+	push := func() {
+		sess := s.getSession()
+		if sess == nil {
+			return
+		}
+
+		live := s.collector.Live()
+		client := cloud.New(s.cfg.SupabaseURL, s.cfg.SupabaseKey, sess.AccessToken)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_ = client.PushHeartbeat(ctx, s.cfg.DeviceID, hostname, live.CPUPercent, live.RAMPercent, live.DiskPercent)
+	}
+
+	push() // đẩy ngay lần đầu, không đợi hết chu kỳ 30s
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		push()
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +180,8 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/api/local/summary", s.handleLocalSummary)
 	s.mux.HandleFunc("/api/local/recent", s.handleLocalRecent)
-	s.mux.HandleFunc("/api/local/insights", s.handleLocalInsights)
+	s.mux.HandleFunc("/api/local/insights", s.handleInsights)
+	s.mux.HandleFunc("/api/machines", s.handleMachines)
 
 	s.mux.HandleFunc("/api/devices", s.handleDevices)
 	s.mux.HandleFunc("/api/inbox", s.handleInbox)
@@ -155,6 +194,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/parent/approve", s.handleParentApprove)
 	s.mux.HandleFunc("/api/parent/revoke", s.handleParentRevoke)
 	s.mux.HandleFunc("/api/parent/child-summary", s.handleParentChildSummary)
+	s.mux.HandleFunc("/api/parent/child-heartbeat", s.handleParentChildHeartbeat)
 	s.mux.HandleFunc("/api/parent/limits", s.handleParentLimits)
 	s.mux.HandleFunc("/api/parent/limits/set", s.handleParentLimitSet)
 	s.mux.HandleFunc("/api/parent/limits/delete", s.handleParentLimitDelete)
@@ -570,38 +610,78 @@ func (s *Server) handleLocalRecent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"mode": "local", "recent": recent})
 }
 
-// handleLocalInsights is the small, on-demand "AI" feature: it sends
-// the last 7 days of local app-usage totals (nothing else — no window
-// titles, no timestamps) to the Anthropic API and returns a summary,
-// a category per app, and a few supportive recommendations. This only
-// runs when the person clicks the button; it is never called
-// automatically or on a schedule.
-func (s *Server) handleLocalInsights(w http.ResponseWriter, r *http.Request) {
+// handleInsights is the small, on-demand "AI" feature: it sends the
+// last ~7 days of app-usage totals — from local SQLite (this device
+// only) or from Supabase (potentially every device on the account,
+// pick via ?source=local|cloud) — to the Gemini API and returns a
+// summary, a category per app, and a few supportive recommendations.
+// This only runs when the person clicks the button; it is never
+// called automatically or on a schedule.
+func (s *Server) handleInsights(w http.ResponseWriter, r *http.Request) {
 	ds := dashsettings.Load()
 
-	apiKey := ds.AnthropicAPIKey
+	apiKey := ds.GeminiAPIKey
 	if apiKey == "" {
-		apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if apiKey == "" {
-		writeErr(w, http.StatusBadRequest, "Add your Anthropic API key in Settings > AI Insights first.")
+		writeErr(w, http.StatusBadRequest, "Add your Gemini API key in Settings > AI Insights first.")
 		return
 	}
 
-	usage, err := s.db.Usage(7)
-	if err != nil {
-		writeErr(w, http.StatusServiceUnavailable, err.Error())
-		return
+	source := r.URL.Query().Get("source")
+	if source == "" {
+		source = "local"
 	}
+
+	var usage []aiinsights.AppUsage
+	var sourceLabel string
+
+	switch source {
+	case "cloud":
+		totals, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.DailyTotal, error) {
+			from, to := dayRangeFor("week")
+			return c.DailyTotals(r.Context(), from, to)
+		})
+		if err != nil {
+			if errors.Is(err, errNotLoggedIn) {
+				writeErr(w, http.StatusUnauthorized, "Log in to use cloud data for insights, or switch to Local.")
+				return
+			}
+			s.writeCloudErr(w, err)
+			return
+		}
+
+		byApp := map[string]int64{}
+		for _, t := range totals {
+			byApp[t.ProcessName] += t.TotalSeconds
+		}
+		for name, secs := range byApp {
+			usage = append(usage, aiinsights.AppUsage{ProcessName: name, TotalSeconds: secs})
+		}
+		sourceLabel = "Supabase cloud sync — all of this account's devices, last 7 days"
+
+	default: // "local"
+		localUsage, err := s.db.Usage(7)
+		if err != nil {
+			writeErr(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		for _, u := range localUsage {
+			usage = append(usage, aiinsights.AppUsage{ProcessName: u.ProcessName, TotalSeconds: u.TotalSeconds})
+		}
+		sourceLabel = "local SQLite database — this device only, last 7 days"
+	}
+
 	if len(usage) == 0 {
-		writeErr(w, http.StatusServiceUnavailable, "Not enough local activity data yet.")
+		writeErr(w, http.StatusServiceUnavailable, "Not enough activity data yet for this source.")
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	insights, err := aiinsights.Generate(ctx, apiKey, usage)
+	insights, err := aiinsights.Generate(ctx, apiKey, usage, sourceLabel)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -611,8 +691,32 @@ func (s *Server) handleLocalInsights(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------
-// Device-to-device messaging API — new, has no Python equivalent.
-// Only ever relayed through Supabase; never a direct connection.
+// Machines (multi-device overview). Every device running this
+// dashboard while logged in pushes its own heartbeat every 30s (see
+// heartbeatLoop) — this just reads them all back for the account.
+// This is also literally "the connection between 2 machines": once
+// both are logged into the same account, each shows up in the
+// other's Machines list automatically, with no extra setup.
+// ---------------------------------------------------------------------
+
+func (s *Server) handleMachines(w http.ResponseWriter, r *http.Request) {
+	heartbeats, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.DeviceHeartbeat, error) {
+		return c.ListHeartbeats(r.Context())
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeJSON(w, map[string]any{"machines": []cloud.DeviceHeartbeat{}, "logged_in": false, "self_device_id": s.cfg.DeviceID})
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"machines": heartbeats, "logged_in": true, "self_device_id": s.cfg.DeviceID})
+}
+
+// ---------------------------------------------------------------------
+// Device-to-device messaging API — has no Python equivalent. Only
+// ever relayed through Supabase; never a direct connection.
 // ---------------------------------------------------------------------
 
 func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
@@ -873,6 +977,27 @@ func (s *Server) handleParentChildSummary(w http.ResponseWriter, r *http.Request
 	writeJSON(w, map[string]any{"apps": apps, "recent": logs})
 }
 
+func (s *Server) handleParentChildHeartbeat(w http.ResponseWriter, r *http.Request) {
+	childID := r.URL.Query().Get("child_id")
+	if childID == "" {
+		writeErr(w, http.StatusBadRequest, "child_id is required")
+		return
+	}
+
+	heartbeats, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.DeviceHeartbeat, error) {
+		return c.ListHeartbeatsForChild(r.Context(), childID)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusUnauthorized, "not logged in")
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"machines": heartbeats})
+}
+
 func (s *Server) handleParentLimits(w http.ResponseWriter, r *http.Request) {
 	childID := r.URL.Query().Get("child_id")
 	if childID == "" {
@@ -1024,7 +1149,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 
 	case "ai_key":
 		ds := dashsettings.Load()
-		ds.AnthropicAPIKey = strings.TrimSpace(r.FormValue("anthropic_api_key"))
+		ds.GeminiAPIKey = strings.TrimSpace(r.FormValue("gemini_api_key"))
 		_ = dashsettings.Save(ds)
 		data = s.basePageData("settings")
 		data.Extra["message"] = data.T["save_success"]

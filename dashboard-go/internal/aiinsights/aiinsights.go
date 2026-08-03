@@ -1,10 +1,9 @@
-// Package aiinsights is a small, on-demand feature: it sends the
-// user's own local app-usage totals (never sent anywhere else) to the
-// Anthropic API and asks for a short summary, a category per app, and
-// a few supportive recommendations. It only runs when the user clicks
-// the button — never automatically, and never as a background job —
-// since it costs an API call and leaves the machine (unlike everything
-// else in the Local Activity tab, which stays fully offline).
+// Package aiinsights is a small, on-demand feature: it sends app-usage
+// totals (from local SQLite or from Supabase, whichever the user picks)
+// to the Google Gemini API and asks for a short summary, a category
+// per app, and a few supportive recommendations. It only runs when the
+// user clicks the button — never automatically, and never as a
+// background job.
 package aiinsights
 
 import (
@@ -16,13 +15,20 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"justintime-dashboard/internal/localdb"
 )
 
-// Model is deliberately a small/cheap/fast model — this is a light
-// summarization task, not something that needs a large model.
-const Model = "claude-haiku-4-5-20251001"
+// Model is deliberately a small/fast/cheap model — this is a light
+// summarization task. Gemini's free tier covers this comfortably for
+// personal use. Bump this constant if you want a different model.
+const Model = "gemini-2.5-flash"
+
+// AppUsage is a source-agnostic input row: either from
+// internal/localdb (this device only) or aggregated from Supabase
+// (internal/cloud, potentially spanning every device on the account).
+type AppUsage struct {
+	ProcessName  string
+	TotalSeconds int64
+}
 
 type AppInsight struct {
 	ProcessName string `json:"process_name"`
@@ -36,7 +42,7 @@ type Insights struct {
 	Recommendations []string     `json:"recommendations"`
 }
 
-const systemPrompt = `You are analyzing a person's own computer app-usage data (process names and total minutes used over the last 7 days) to help THEM understand their own habits. This is self-reflection, not surveillance or a report to anyone else.
+const systemPrompt = `You are analyzing a person's own computer app-usage data (process names and total minutes used over roughly the last 7 days) to help THEM understand their own habits. This is self-reflection, not surveillance or a report to anyone else.
 
 Respond with ONLY a JSON object matching this exact schema — no markdown code fences, no extra commentary before or after:
 {
@@ -51,43 +57,55 @@ Guidelines:
 - If the usage pattern already looks healthy and balanced, say so instead of inventing a problem.
 - 2-4 recommendations is plenty; don't pad the list.`
 
-// Generate calls the Anthropic API with the given usage totals and
-// returns structured insights. apiKey is the caller's own Anthropic
-// API key (see Settings > AI Insights) — this package never embeds or
-// shares a key of its own.
-func Generate(ctx context.Context, apiKey string, usage []localdb.AppUsage) (*Insights, error) {
+// Generate calls the Gemini API with the given usage totals and
+// returns structured insights. apiKey is the caller's own Gemini API
+// key (see Settings > AI Insights) — this package never embeds or
+// shares a key of its own. sourceLabel is a short human-readable
+// description of where the data came from (e.g. "this device (local)"
+// or "all your devices (cloud)"), folded into the prompt so the
+// summary can refer to it naturally.
+func Generate(ctx context.Context, apiKey string, usage []AppUsage, sourceLabel string) (*Insights, error) {
 	if apiKey == "" {
-		return nil, fmt.Errorf("no Anthropic API key configured — add one in Settings > AI Insights")
+		return nil, fmt.Errorf("no Gemini API key configured — add one in Settings > AI Insights")
 	}
 	if len(usage) == 0 {
-		return nil, fmt.Errorf("not enough local activity data yet")
+		return nil, fmt.Errorf("not enough activity data yet")
 	}
 
 	var sb strings.Builder
+	fmt.Fprintf(&sb, "Data source: %s\n\n", sourceLabel)
+	fmt.Fprintf(&sb, "App usage (process name: total minutes):\n\n")
 	for _, u := range usage {
 		fmt.Fprintf(&sb, "- %s: %d minutes\n", u.ProcessName, u.TotalSeconds/60)
 	}
 
-	userPrompt := "Here is the app usage data (process name: total minutes over the last 7 days):\n\n" + sb.String()
-
 	reqBody, err := json.Marshal(map[string]any{
-		"model":      Model,
-		"max_tokens": 1024,
-		"system":     systemPrompt,
-		"messages": []map[string]string{
-			{"role": "user", "content": userPrompt},
+		"system_instruction": map[string]any{
+			"parts": []map[string]string{{"text": systemPrompt}},
+		},
+		"contents": []map[string]any{
+			{
+				"role":  "user",
+				"parts": []map[string]string{{"text": sb.String()}},
+			},
+		},
+		"generationConfig": map[string]any{
+			"response_mime_type": "application/json",
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(reqBody))
+	url := fmt.Sprintf(
+		"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
+		Model, apiKey,
+	)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -104,24 +122,28 @@ func Generate(ctx context.Context, apiKey string, usage []localdb.AppUsage) (*In
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Anthropic API returned HTTP %d: %s", resp.StatusCode, string(respBytes))
+		return nil, fmt.Errorf("Gemini API returned HTTP %d: %s", resp.StatusCode, string(respBytes))
 	}
 
 	var apiResp struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
 	}
 	if err := json.Unmarshal(respBytes, &apiResp); err != nil {
-		return nil, fmt.Errorf("could not parse Anthropic API response: %w", err)
+		return nil, fmt.Errorf("could not parse Gemini API response: %w", err)
+	}
+	if len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("Gemini API returned no content (possibly blocked by safety filters)")
 	}
 
 	var rawText strings.Builder
-	for _, c := range apiResp.Content {
-		if c.Type == "text" {
-			rawText.WriteString(c.Text)
-		}
+	for _, part := range apiResp.Candidates[0].Content.Parts {
+		rawText.WriteString(part.Text)
 	}
 
 	text := strings.TrimSpace(rawText.String())

@@ -81,6 +81,27 @@
 
     <!-- ============ OVERVIEW ============ -->
     <div id="view-overview" class="dash-view">
+
+        <!-- Fleet status: Online/Offline/Warning/Critical across every machine on the account -->
+        <div class="fleet-row">
+            <div class="fleet-card online">
+                <span class="fleet-dot"></span>
+                <div><div class="fleet-count" id="fleet-online-count">-</div><div class="fleet-label">Online</div></div>
+            </div>
+            <div class="fleet-card offline">
+                <span class="fleet-dot"></span>
+                <div><div class="fleet-count" id="fleet-offline-count">-</div><div class="fleet-label">Offline</div></div>
+            </div>
+            <div class="fleet-card warning">
+                <span class="fleet-dot"></span>
+                <div><div class="fleet-count" id="fleet-warning-count">-</div><div class="fleet-label">Warning</div></div>
+            </div>
+            <div class="fleet-card critical">
+                <span class="fleet-dot"></span>
+                <div><div class="fleet-count" id="fleet-critical-count">-</div><div class="fleet-label">Critical</div></div>
+            </div>
+        </div>
+
         <div class="grid cols-4">
             <div class="stat-card">
                 <div class="stat-card-head">
@@ -135,6 +156,13 @@
             </div>
         </div>
 
+        <!-- Machines: every device on this account, via device_heartbeats -->
+        <div class="section-title">Machines</div>
+        <div id="machines-error"></div>
+        <div class="panel">
+            <div id="machines-list"><p style="color:#4a6584;">Loading…</p></div>
+        </div>
+
         <div class="panel">
             <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700;">System Performance</h3>
             <div class="stat-subtitle" style="margin:-8px 0 14px 0;">Realtime Performance Overview</div>
@@ -142,10 +170,18 @@
             <div class="stat-updated" id="history-updated">—</div>
         </div>
 
+        <!-- Recent Alerts: rolling log of threshold-crossing events this session -->
+        <div class="section-title">Recent Alerts</div>
+        <div class="panel">
+            <ul id="alerts-log" style="list-style:none; margin:0; padding:0; display:grid; gap:8px;">
+                <li style="color:#4a6584; font-size:13px;">No alerts yet this session.</li>
+            </ul>
+        </div>
+
         <div class="panel">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
                 <div>
-                    <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700; margin:0;">Processes</h3>
+                    <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700; margin:0;">Top Processes</h3>
                     <div class="stat-subtitle">Running Processes</div>
                 </div>
             </div>
@@ -155,6 +191,35 @@
                 </thead>
                 <tbody id="process-body"><tr><td colspan="5" style="color:#4a6584;">Loading…</td></tr></tbody>
             </table>
+        </div>
+
+        <!-- Activity Timeline: this device's most recent tracked activity -->
+        <div class="section-title">Activity Timeline</div>
+        <div class="panel">
+            <div id="activity-timeline" class="timeline">
+                <p style="color:#4a6584; font-size:13px;">Loading…</p>
+            </div>
+        </div>
+
+        <div class="grid cols-2">
+            <div class="panel">
+                <h3>Agent / Service Status</h3>
+                <div id="agent-status-body">
+                    <div class="agent-status-row"><span class="label">Loading…</span><span class="value"></span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Quick Actions</h3>
+                <div class="quick-actions-grid">
+                    <button type="button" class="quick-action-btn" onclick="location.reload()"><span class="qa-icon">🔄</span> Refresh Now</button>
+                    <button type="button" class="quick-action-btn" onclick="window.open('/export/csv','_blank')"><span class="qa-icon">📤</span> Export CSV</button>
+                    <button type="button" class="quick-action-btn" onclick="window.open('/report','_blank')"><span class="qa-icon">🖨️</span> Print Report</button>
+                    <button type="button" class="quick-action-btn" onclick="location.href='/settings'"><span class="qa-icon">⚙️</span> Settings</button>
+                    <button type="button" class="quick-action-btn" onclick="activateView('family'); history.pushState(null,'','/?view=family')"><span class="qa-icon">👪</span> Family</button>
+                    <button type="button" class="quick-action-btn" onclick="activateView('devices'); history.pushState(null,'','/?view=devices')"><span class="qa-icon">🖥️</span> Devices</button>
+                </div>
+            </div>
         </div>
 
         <div class="section-title">{{.T.machine_config}}</div>
@@ -285,6 +350,10 @@
             <span><button type="button" class="btn btn-outline" id="btn-generate-insights">{{.T.ai_insights_generate}}</button></span>
         </div>
         <div class="panel">
+            <div class="tabs" style="margin-bottom:16px;">
+                <button data-insights-source="local" class="active insights-source-btn">{{.T.ai_insights_source_local}}</button>
+                <button data-insights-source="cloud" class="insights-source-btn">{{.T.ai_insights_source_cloud}}</button>
+            </div>
             <div id="insights-error"></div>
             <div id="insights-loading" style="display:none; color:#7e9ac0; font-size:13px;">{{.T.ai_insights_generating}}</div>
             <div id="insights-result" style="display:none;">
@@ -450,6 +519,8 @@
             ram: {{.DS.RAMThreshold}},
             disk: {{.DS.DiskThreshold}}
         };
+
+        const DEVICE_ID = {{json .DeviceID}};
 
         const LABELS = {
             cpuHigh: {{json .T.alert_cpu_high}},

@@ -21,10 +21,10 @@ type Settings struct {
 	RAMThreshold  int    `json:"ram_threshold"`
 	DiskThreshold int    `json:"disk_threshold"`
 
-	// Only ever sent to api.anthropic.com when the user explicitly
-	// clicks "Generate Insights" on the Local Activity tab — never
-	// used automatically, never sent anywhere else.
-	AnthropicAPIKey string `json:"anthropic_api_key"`
+	// Only ever sent to generativelanguage.googleapis.com when the
+	// user explicitly clicks "Generate Insights" — never used
+	// automatically, never sent anywhere else.
+	GeminiAPIKey string `json:"gemini_api_key"`
 }
 
 func Defaults() Settings {
@@ -75,8 +75,15 @@ func Load() Settings {
 	if v, ok := data["disk_threshold"]; ok {
 		_ = json.Unmarshal(v, &out.DiskThreshold)
 	}
-	if v, ok := data["anthropic_api_key"]; ok {
-		_ = json.Unmarshal(v, &out.AnthropicAPIKey)
+	if v, ok := data["gemini_api_key"]; ok {
+		_ = json.Unmarshal(v, &out.GeminiAPIKey)
+	} else if v, ok := data["anthropic_api_key"]; ok {
+		// Migration note: this field switched from Anthropic to
+		// Gemini. If an old key is sitting here it's not usable with
+		// the Gemini API anyway, so we don't carry it over — just
+		// avoid crashing on the old field name.
+		var old string
+		_ = json.Unmarshal(v, &old)
 	}
 	return out
 }
