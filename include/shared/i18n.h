@@ -7,10 +7,11 @@
 //
 // Đây KHÔNG phải i18n đầy đủ cho toàn bộ ứng dụng - hiện chỉ
 // phủ tray menu, About, Settings (phần vai trò/ngôn ngữ),
-// ParentDialog, ParentLinkDialog. Các dialog cũ hơn (Login,
-// Supabase Setup, Remote View, phần còn lại của Settings) vẫn
-// còn tiếng Anh cứng - có thể bổ sung dần bằng cách thêm entry
-// vào bảng trong i18n.c và gọi i18n_t("key") thay cho literal.
+// ParentPage, ParentLinkPage, Control Panel (sidebar + Overview).
+// Các trang cũ hơn (Account/Login, Supabase Setup, Remote View,
+// phần còn lại của Settings) vẫn còn tiếng Anh cứng - có thể bổ
+// sung dần bằng cách thêm entry vào bảng trong i18n.c và gọi
+// i18n_t("key") thay cho literal.
 //
 
 #ifndef I18N_H

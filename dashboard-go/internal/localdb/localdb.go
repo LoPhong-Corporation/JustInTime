@@ -126,3 +126,38 @@ func (d *DB) RecentActivities(limit int) ([]Activity, error) {
 	}
 	return out, rows.Err()
 }
+
+// ActivitiesForDay returns every activity_logs row whose start_time
+// falls within [dayStart, dayEnd) (unix seconds, caller's local day
+// boundaries), oldest first - built for the visual Timeline (see
+// handleTimeline in server.go), which needs every segment across the
+// day in order, not just the most recent N like RecentActivities.
+func (d *DB) ActivitiesForDay(dayStart, dayEnd int64) ([]Activity, error) {
+	if d == nil || d.sql == nil {
+		return nil, fmt.Errorf("local database not available")
+	}
+
+	rows, err := d.sql.Query(
+		`SELECT process_name, window_title, duration_seconds, start_time, end_time, synced
+		 FROM activity_logs
+		 WHERE start_time >= ? AND start_time < ?
+		 ORDER BY start_time ASC`,
+		dayStart, dayEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Activity
+	for rows.Next() {
+		var a Activity
+		var synced int
+		if err := rows.Scan(&a.ProcessName, &a.WindowTitle, &a.Duration, &a.StartTime, &a.EndTime, &synced); err != nil {
+			return nil, err
+		}
+		a.Synced = synced != 0
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

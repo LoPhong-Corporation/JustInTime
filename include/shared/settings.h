@@ -23,7 +23,7 @@ extern "C" {
  * y hệt trước đây, không đổi gì cho người dùng hiện tại. Chỉ
  * khi người dùng chủ động chọn "Phụ huynh" trong Settings thì
  * app mới chuyển sang vai trò xem/giới hạn con (xem parentlink.h,
- * applimits.h, parentdialog.h).
+ * applimits.h, parentpage.h).
  */
 #define APP_ROLE_CHILD  0
 #define APP_ROLE_PARENT 1

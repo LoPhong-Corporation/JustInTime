@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
+	"justintime-dashboard/internal/aiinsights"
 	"justintime-dashboard/internal/cloud"
 	"justintime-dashboard/internal/config"
-	"justintime-dashboard/internal/aiinsights"
 	"justintime-dashboard/internal/dashsession"
 	"justintime-dashboard/internal/dashsettings"
 	"justintime-dashboard/internal/i18n"
@@ -120,7 +120,12 @@ func New(cfg *config.Config, db *localdb.DB) *Server {
 // same account simply see each other's heartbeat rows here, still
 // entirely relayed through Supabase — never a direct connection.
 func (s *Server) heartbeatLoop() {
-	hostname, _ := os.Hostname()
+	// FIX (privacy): trước đây gửi thẳng os.Hostname() (tên máy Windows
+	// thật) lên Supabase làm cột "hostname", hiển thị nguyên văn cho bất
+	// kỳ ai xem chung tài khoản (kể cả phụ huynh xem máy con). Giờ gửi
+	// DisplayLabel() - nhãn ẩn danh mặc định "Computer XXXX" hoặc tên do
+	// chính người dùng tự đặt, không bao giờ là tên máy thật.
+	label := s.cfg.DisplayLabel()
 
 	push := func() {
 		sess := s.getSession()
@@ -134,7 +139,7 @@ func (s *Server) heartbeatLoop() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		_ = client.PushHeartbeat(ctx, s.cfg.DeviceID, hostname, live.CPUPercent, live.RAMPercent, live.DiskPercent)
+		_ = client.PushHeartbeat(ctx, s.cfg.DeviceID, label, live.CPUPercent, live.RAMPercent, live.DiskPercent)
 	}
 
 	push() // đẩy ngay lần đầu, không đợi hết chu kỳ 30s
@@ -180,19 +185,24 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/api/local/summary", s.handleLocalSummary)
 	s.mux.HandleFunc("/api/local/recent", s.handleLocalRecent)
+	s.mux.HandleFunc("/api/local/timeline", s.handleTimeline)
+	s.mux.HandleFunc("/api/local/chat", s.handleChat)
 	s.mux.HandleFunc("/api/local/insights", s.handleInsights)
 	s.mux.HandleFunc("/api/machines", s.handleMachines)
 
 	s.mux.HandleFunc("/api/devices", s.handleDevices)
 	s.mux.HandleFunc("/api/inbox", s.handleInbox)
+	s.mux.HandleFunc("/api/thread", s.handleThread)
 	s.mux.HandleFunc("/api/send", s.handleSend)
 	s.mux.HandleFunc("/api/inbox/read", s.handleMarkRead)
+	s.mux.HandleFunc("/api/devices/share-stats", s.handleShareStats)
 
 	s.mux.HandleFunc("/api/parent/children", s.handleParentChildren)
 	s.mux.HandleFunc("/api/parent/parents", s.handleParentParents)
 	s.mux.HandleFunc("/api/parent/invite", s.handleParentInvite)
 	s.mux.HandleFunc("/api/parent/approve", s.handleParentApprove)
 	s.mux.HandleFunc("/api/parent/revoke", s.handleParentRevoke)
+	s.mux.HandleFunc("/api/parent/permission", s.handleParentSetPermission)
 	s.mux.HandleFunc("/api/parent/child-summary", s.handleParentChildSummary)
 	s.mux.HandleFunc("/api/parent/child-heartbeat", s.handleParentChildHeartbeat)
 	s.mux.HandleFunc("/api/parent/limits", s.handleParentLimits)
@@ -269,6 +279,7 @@ type pageData struct {
 	CurrentEmail string
 	LoggedIn     bool
 	DeviceID     string
+	DeviceLabel  string
 	ActivePage   string
 	Extra        map[string]any
 }
@@ -288,6 +299,7 @@ func (s *Server) basePageData(activePage string) pageData {
 		CurrentEmail: email,
 		LoggedIn:     loggedIn,
 		DeviceID:     s.cfg.DeviceID,
+		DeviceLabel:  s.cfg.DisplayLabel(),
 		ActivePage:   activePage,
 		Extra:        map[string]any{},
 	}
@@ -610,6 +622,165 @@ func (s *Server) handleLocalRecent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"mode": "local", "recent": recent})
 }
 
+// timelineColors is a small fixed palette cycled deterministically per
+// process name (same app always gets the same color within a single
+// response, via a stable hash) - good enough for a handful of apps in
+// one day without needing per-app config anywhere.
+var timelineColors = []string{
+	"#5aa9ff", "#22c55e", "#f5a524", "#a78bfa", "#f472b6",
+	"#2dd4bf", "#fb923c", "#eab308", "#60a5fa", "#e879f9",
+}
+
+func timelineColorFor(name string) string {
+	var h uint32
+	for i := 0; i < len(name); i++ {
+		h = h*31 + uint32(name[i])
+	}
+	return timelineColors[h%uint32(len(timelineColors))]
+}
+
+// handleTimeline powers the visual "Activity Timeline" widget: a
+// single 24h strip with one colored segment per app-session, instead
+// of the old plain scrollable list (which is still available via
+// /api/local/recent for anyone who wants the raw feed). date is
+// optional, "YYYY-MM-DD" in the dashboard machine's local time zone;
+// defaults to today.
+func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
+	loc := time.Now().Location()
+
+	dayStart := time.Now()
+	if dateStr := r.URL.Query().Get("date"); dateStr != "" {
+		parsed, err := time.ParseInLocation("2006-01-02", dateStr, loc)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
+			return
+		}
+		dayStart = parsed
+	}
+
+	start := time.Date(dayStart.Year(), dayStart.Month(), dayStart.Day(), 0, 0, 0, 0, loc)
+	end := start.Add(24 * time.Hour)
+
+	activities, err := s.db.ActivitiesForDay(start.Unix(), end.Unix())
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	type segment struct {
+		ProcessName string  `json:"process_name"`
+		WindowTitle string  `json:"window_title"`
+		StartTime   int64   `json:"start_time"`
+		EndTime     int64   `json:"end_time"`
+		Color       string  `json:"color"`
+		StartPct    float64 `json:"start_pct"` // % qua ngày (0-100) - FE dùng để đặt vị trí/độ rộng
+		WidthPct    float64 `json:"width_pct"`
+	}
+
+	dayLenSec := end.Sub(start).Seconds()
+	segments := make([]segment, 0, len(activities))
+	totalByApp := map[string]int64{}
+
+	for _, a := range activities {
+		if a.Duration <= 0 {
+			continue
+		}
+		startPct := float64(a.StartTime-start.Unix()) / dayLenSec * 100
+		widthPct := float64(a.Duration) / dayLenSec * 100
+		if widthPct < 0.15 {
+			widthPct = 0.15 // đoạn quá ngắn thì vẫn cho 1 vệt mảnh nhìn thấy được, thay vì biến mất
+		}
+		segments = append(segments, segment{
+			ProcessName: a.ProcessName,
+			WindowTitle: a.WindowTitle,
+			StartTime:   a.StartTime,
+			EndTime:     a.EndTime,
+			Color:       timelineColorFor(a.ProcessName),
+			StartPct:    startPct,
+			WidthPct:    widthPct,
+		})
+		totalByApp[a.ProcessName] += a.Duration
+	}
+
+	type legendEntry struct {
+		ProcessName  string `json:"process_name"`
+		Color        string `json:"color"`
+		TotalSeconds int64  `json:"total_seconds"`
+	}
+	legend := make([]legendEntry, 0, len(totalByApp))
+	for name, secs := range totalByApp {
+		legend = append(legend, legendEntry{ProcessName: name, Color: timelineColorFor(name), TotalSeconds: secs})
+	}
+	sort.Slice(legend, func(i, j int) bool { return legend[i].TotalSeconds > legend[j].TotalSeconds })
+
+	writeJSON(w, map[string]any{
+		"date":     start.Format("2006-01-02"),
+		"segments": segments,
+		"legend":   legend,
+	})
+}
+
+type chatRequest struct {
+	History []aiinsights.ChatMessage `json:"history"`
+}
+
+// handleChat is the small AI chatbot: it answers free-form questions
+// about the person's OWN usage data (this device's local SQLite, last
+// ~14 days) - "how much Discord did I use this week?" - by handing
+// the conversation + a fresh usage snapshot to Gemini. Same opt-in,
+// on-demand principle as handleInsights: only runs when the person
+// sends a message, never automatically.
+func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+
+	ds := dashsettings.Load()
+	apiKey := ds.GeminiAPIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
+	if apiKey == "" {
+		writeErr(w, http.StatusBadRequest, "Add your Gemini API key in Settings > AI Insights first.")
+		return
+	}
+
+	var req chatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.History) == 0 {
+		writeErr(w, http.StatusBadRequest, "history (with at least one message) is required")
+		return
+	}
+	// Giới hạn độ dài lịch sử gửi lên Gemini mỗi lần - tránh phình
+	// request vô hạn khi cuộc trò chuyện dài dần theo thời gian.
+	if len(req.History) > 20 {
+		req.History = req.History[len(req.History)-20:]
+	}
+
+	usage, err := s.db.Usage(14)
+	if err != nil {
+		// Không có dữ liệu local vẫn cho chat tiếp - Chat() tự xử lý
+		// usage rỗng bằng cách nói thẳng là chưa có dữ liệu.
+		usage = nil
+	}
+
+	aiUsage := make([]aiinsights.AppUsage, 0, len(usage))
+	for _, u := range usage {
+		aiUsage = append(aiUsage, aiinsights.AppUsage{ProcessName: u.ProcessName, TotalSeconds: u.TotalSeconds})
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	reply, err := aiinsights.Chat(ctx, apiKey, req.History, aiUsage)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	writeJSON(w, map[string]any{"reply": reply})
+}
+
 // handleInsights is the small, on-demand "AI" feature: it sends the
 // last ~7 days of app-usage totals — from local SQLite (this device
 // only) or from Supabase (potentially every device on the account,
@@ -756,6 +927,82 @@ func (s *Server) handleInbox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"messages": msgs, "logged_in": true})
 }
 
+// handleThread is the real two-way "chat with this device" view (see
+// cloud.Client.Thread) — still 100% relayed through Supabase, exactly
+// like everything else here; it never opens a direct connection to
+// the other machine, so it works the same way even if the other
+// device is offline right now (the messages just wait in the table
+// until it next opens the dashboard).
+func (s *Server) handleThread(w http.ResponseWriter, r *http.Request) {
+	otherID := r.URL.Query().Get("device_id")
+	if otherID == "" {
+		writeErr(w, http.StatusBadRequest, "device_id is required")
+		return
+	}
+
+	msgs, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.Message, error) {
+		return c.Thread(r.Context(), s.cfg.DeviceID, otherID, 100)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeJSON(w, map[string]any{"messages": []cloud.Message{}, "logged_in": false})
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"messages": msgs, "self_device_id": s.cfg.DeviceID, "logged_in": true})
+}
+
+type shareStatsRequest struct {
+	TargetDeviceID string `json:"target_device_id"`
+}
+
+// handleShareStats answers a "what are your stats right now" request
+// from another of the user's own devices: it packages THIS device's
+// current live CPU/RAM/disk (same numbers the Overview cards show)
+// into a kind="data" message and relays it through Supabase, same as
+// any other device_messages row - the requester picks it up next time
+// they poll their thread (loadDeviceThread()), no direct connection.
+func (s *Server) handleShareStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req shareStatsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.TargetDeviceID == "" {
+		writeErr(w, http.StatusBadRequest, "target_device_id is required")
+		return
+	}
+
+	live := s.collector.Live()
+	payload, _ := json.Marshal(map[string]any{
+		"type":         "stats_reply",
+		"label":        s.cfg.DisplayLabel(),
+		"cpu_percent":  live.CPUPercent,
+		"ram_percent":  live.RAMPercent,
+		"disk_percent": live.DiskPercent,
+	})
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.SendMessage(r.Context(), cloud.Message{
+			SenderDeviceID: s.cfg.DeviceID,
+			TargetDeviceID: req.TargetDeviceID,
+			Kind:           "data",
+			Payload:        string(payload),
+		})
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusServiceUnavailable, "device messaging requires an internet connection and login")
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
 type sendRequest struct {
 	TargetDeviceID string `json:"target_device_id"`
 	Kind           string `json:"kind"`
@@ -842,7 +1089,102 @@ func (s *Server) handleParentChildren(w http.ResponseWriter, r *http.Request) {
 		s.writeCloudErr(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{"links": links, "logged_in": true})
+
+	// RBAC: gộp permission_level vào từng link (xem
+	// migrations/005_permission_levels.sql). Lỗi ở bước này không nên
+	// chặn cả trang - nếu không lấy được, coi như "full" (giá trị mặc
+	// định của migration) để không đột ngột khoá quyền ai cả.
+	perms, permErr := withAuthRetry(s, r.Context(), func(c *cloud.Client) (map[int64]string, error) {
+		return c.ListPermissions(r.Context())
+	})
+
+	type childRow struct {
+		cloud.ParentLink
+		PermissionLevel string `json:"permission_level"`
+	}
+
+	rows := make([]childRow, 0, len(links))
+	for _, l := range links {
+		level := "full"
+		if permErr == nil {
+			if v, ok := perms[l.ID]; ok && v != "" {
+				level = v
+			}
+		}
+		rows = append(rows, childRow{ParentLink: l, PermissionLevel: level})
+	}
+
+	writeJSON(w, map[string]any{"links": rows, "logged_in": true})
+}
+
+type setPermissionRequest struct {
+	ID              int64  `json:"id"`
+	PermissionLevel string `json:"permission_level"`
+}
+
+func (s *Server) handleParentSetPermission(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req setPermissionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == 0 {
+		writeErr(w, http.StatusBadRequest, "id and permission_level are required")
+		return
+	}
+	if req.PermissionLevel != "full" && req.PermissionLevel != "view_only" {
+		writeErr(w, http.StatusBadRequest, "permission_level must be 'full' or 'view_only'")
+		return
+	}
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.SetPermission(r.Context(), req.ID, req.PermissionLevel)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusUnauthorized, "not logged in")
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// permissionForChild looks up this parent's permission_level for a
+// given child_user_id - "full" if not logged in to a working answer
+// isn't possible, or if the link isn't found (defensive default that
+// matches the migration's own column default, never silently grants
+// MORE than that).
+func (s *Server) permissionForChild(ctx context.Context, childUserID string) string {
+	links, err := withAuthRetry(s, ctx, func(c *cloud.Client) ([]cloud.ParentLink, error) {
+		return c.ListLinksAsParent(ctx)
+	})
+	if err != nil {
+		return "full"
+	}
+
+	var linkID int64 = -1
+	for _, l := range links {
+		if l.OtherUserID == childUserID {
+			linkID = l.ID
+			break
+		}
+	}
+	if linkID < 0 {
+		return "full"
+	}
+
+	perms, err := withAuthRetry(s, ctx, func(c *cloud.Client) (map[int64]string, error) {
+		return c.ListPermissions(ctx)
+	})
+	if err != nil {
+		return "full"
+	}
+	if v, ok := perms[linkID]; ok && v != "" {
+		return v
+	}
+	return "full"
 }
 
 func (s *Server) handleParentParents(w http.ResponseWriter, r *http.Request) {
@@ -1047,6 +1389,13 @@ func (s *Server) handleParentLimitSet(w http.ResponseWriter, r *http.Request) {
 		dailyLimitSec = &sec
 	}
 
+	// RBAC (xem migrations/005_permission_levels.sql): phụ huynh với
+	// quyền "view_only" chỉ được XEM, không được đặt giới hạn app.
+	if s.permissionForChild(r.Context(), req.ChildUserID) != "full" {
+		writeErr(w, http.StatusForbidden, "Bạn chỉ có quyền xem (view-only) với tài khoản này, không thể đặt giới hạn app.")
+		return
+	}
+
 	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
 		return struct{}{}, c.SetLimit(r.Context(), req.ChildUserID, req.ProcessName, dailyLimitSec, req.Blocked)
 	})
@@ -1062,7 +1411,8 @@ func (s *Server) handleParentLimitSet(w http.ResponseWriter, r *http.Request) {
 }
 
 type deleteLimitRequest struct {
-	ID int64 `json:"id"`
+	ID          int64  `json:"id"`
+	ChildUserID string `json:"child_user_id"`
 }
 
 func (s *Server) handleParentLimitDelete(w http.ResponseWriter, r *http.Request) {
@@ -1073,6 +1423,14 @@ func (s *Server) handleParentLimitDelete(w http.ResponseWriter, r *http.Request)
 	var req deleteLimitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// RBAC: cùng luật với handleParentLimitSet ở trên. child_user_id
+	// do frontend gửi kèm (nó đã biết đang xoá giới hạn của con nào -
+	// xem dashboard.js deleteLimit()).
+	if req.ChildUserID != "" && s.permissionForChild(r.Context(), req.ChildUserID) != "full" {
+		writeErr(w, http.StatusForbidden, "Bạn chỉ có quyền xem (view-only) với tài khoản này, không thể xoá giới hạn app.")
 		return
 	}
 

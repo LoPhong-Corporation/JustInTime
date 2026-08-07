@@ -12,6 +12,7 @@
 #include <atomic>
 
 class UpdateChecker;
+class ControlPanelWindow;
 
 class TrayIcon : public QObject
 {
@@ -108,6 +109,14 @@ private:
     QString        m_pendingDownloadUrl;
     QString        m_lastNotifiedVersion;
     bool           m_manualUpdateCheck = false;
+
+    /*
+     * Cửa sổ điều khiển trung tâm (thay cho các QDialog rời rạc
+     * trước đây - Settings/Login/Remote View/Monitored By/Family/
+     * Supabase Setup giờ đều là các trang bên trong cửa sổ này).
+     * Tạo 1 lần duy nhất, dùng lại (openTo()) cho mọi lần mở.
+     */
+    ControlPanelWindow *m_controlPanel = nullptr;
 
     std::atomic<bool> m_paused{false};
     bool m_debugVisible = false;

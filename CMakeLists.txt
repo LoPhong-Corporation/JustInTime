@@ -11,8 +11,11 @@ set(CMAKE_AUTORCC ON)
 
 # Nếu CMake không tự tìm thấy Qt6, set CMAKE_PREFIX_PATH trỏ tới
 # thư mục cài Qt, ví dụ:
-#   -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64"
-set(CMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64")
+#   -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64" 
+set(Qt6_DIR
+    "C:/Qt/6.11.1/msvc2022_64/lib/cmake/Qt6"
+)
+
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 add_executable(JustInTime WIN32
@@ -48,30 +51,32 @@ add_executable(JustInTime WIN32
         src/core/activity.c
         include/core/activity.h
 
-        # ---- agent/ : vai trò "con" (tray UI, sync, remote view, dialogs, entrypoint) ----
+        # ---- agent/ : vai trò "con" (tray UI, Control Panel, sync, entrypoint) ----
         src/agent/main.cpp
         "include/agent/trayicon.h"
         src/agent/trayicon.cpp
-        "include/agent/logindialog.h"
-        src/agent/logindialog.cpp
-        "include/agent/settingsdialog.h"
-        src/agent/settingsdialog.cpp
-        "include/agent/supabasesetupdialog.h"
-        src/agent/supabasesetupdialog.cpp
-        "include/agent/remoteviewdialog.h"
-        src/agent/remoteviewdialog.cpp
+        "include/agent/controlpanelwindow.h"
+        src/agent/controlpanelwindow.cpp
+        "include/agent/loginpage.h"
+        src/agent/loginpage.cpp
+        "include/agent/settingspage.h"
+        src/agent/settingspage.cpp
+        "include/agent/supabasesetuppage.h"
+        src/agent/supabasesetuppage.cpp
+        "include/agent/remoteviewpage.h"
+        src/agent/remoteviewpage.cpp
         "include/agent/updatechecker.h"
         src/agent/updatechecker.cpp
         include/agent/remoteview.h
         src/agent/remoteview.c
         include/agent/sync.h
         src/agent/sync.c
-        "include/agent/parentlinkdialog.h"
-        src/agent/parentlinkdialog.cpp
+        "include/agent/parentlinkpage.h"
+        src/agent/parentlinkpage.cpp
 
         # ---- parent/ : vai trò "phụ huynh" (xem dữ liệu con + đặt giới hạn) ----
-        "include/parent/parentdialog.h"
-        src/parent/parentdialog.cpp
+        "include/parent/parentpage.h"
+        src/parent/parentpage.cpp
 )
 
 include_directories(third_party)

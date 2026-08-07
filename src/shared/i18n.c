@@ -104,8 +104,10 @@ static const I18nEntry g_entries[] = {
         "Đổi vai trò không xoá dữ liệu đã theo dõi trên máy này. Vai trò "
         "\"Con\" là mặc định và giữ nguyên hành vi cũ."},
     {"settings.language_label",  "Interface language:",                 "Ngôn ngữ giao diện:"},
+    {"settings.page_title",      "Settings",                            "Cài đặt"},
+    {"page.save_btn",            "Save",                                "Lưu"},
 
-    /* ---- ParentLinkDialog (child transparency view) ---- */
+    /* ---- ParentLinkPage (child transparency view) ---- */
     {"plink.title",             "Monitored By...",                    "Được giám sát bởi..."},
     {"plink.note",
         "The list below shows EVERY parent account requesting or already "
@@ -135,7 +137,7 @@ static const I18nEntry g_entries[] = {
         "Thu hồi quyền xem của phụ huynh này? Họ sẽ không còn xem được hoạt động của máy nữa."},
     {"plink.revoked_msg",       "Revoked.",                             "Đã thu hồi."},
 
-    /* ---- ParentDialog (parent role) ---- */
+    /* ---- ParentPage (parent role) ---- */
     {"pdlg.title",                "Parent Dashboard",                    "Parent Dashboard"},
     {"pdlg.invite_box",          "Invite a New Child",                  "Mời con mới"},
     {"pdlg.invite_note",
@@ -186,6 +188,111 @@ static const I18nEntry g_entries[] = {
     {"pdlg.limit_saved",          "Limit saved.",                         "Đã lưu giới hạn."},
     {"pdlg.enter_child_email",   "Enter your child's email first.",     "Nhập email của con trước."},
     {"pdlg.select_limit_first",  "Select a limit in the list first.",   "Chọn 1 giới hạn trong danh sách trước."},
+
+    /* ---- Control Panel (cửa sổ điều khiển hợp nhất) ---- */
+    {"cp.title",              "JustInTime Control Panel",           "Bảng điều khiển JustInTime"},
+    {"cp.nav_overview",       "Overview",                           "Tổng quan"},
+    {"cp.nav_account",        "Account",                            "Tài khoản"},
+    {"cp.nav_settings",       "Settings",                           "Cài đặt"},
+    {"cp.nav_remoteview",     "Remote View",                        "Xem từ xa"},
+    {"cp.nav_parentlink",     "Monitored By",                       "Được giám sát bởi"},
+    {"cp.nav_family",         "Family",                             "Gia đình"},
+    {"cp.nav_advanced",       "Advanced",                           "Nâng cao"},
+    {"cp.nav_about",          "About",                              "Giới thiệu"},
+
+    {"cp.overview_greeting_in",
+        "Welcome back",
+        "Chào mừng trở lại"},
+    {"cp.overview_greeting_out",
+        "Welcome to JustInTime",
+        "Chào mừng đến với JustInTime"},
+    {"cp.overview_not_logged_in",
+        "You're not logged in yet. Your activity is still tracked and saved "
+        "locally on this computer - logging in just adds cloud sync, "
+        "family features, and Remote View.",
+        "Bạn chưa đăng nhập. Hoạt động vẫn được theo dõi và lưu cục bộ trên "
+        "máy này bình thường - đăng nhập chỉ để thêm đồng bộ đám mây, "
+        "tính năng gia đình, và Xem từ xa."},
+    {"cp.overview_login_cta",     "Log in / Sign up",                  "Đăng nhập / Đăng ký"},
+    {"cp.overview_status_tracking", "Tracking your activity right now.", "Đang theo dõi hoạt động."},
+    {"cp.overview_status_paused",   "Tracking is paused.",               "Đang tạm dừng theo dõi."},
+    {"cp.overview_pause_btn",       "Pause tracking",                    "Tạm dừng theo dõi"},
+    {"cp.overview_resume_btn",      "Resume tracking",                   "Tiếp tục theo dõi"},
+    {"cp.overview_today_title",     "Today so far",                      "Hôm nay"},
+    {"cp.overview_quick_links",     "Quick links",                       "Lối tắt nhanh"},
+    {"cp.overview_open_dashboard",  "Open full Dashboard",               "Mở Dashboard đầy đủ"},
+    {"cp.overview_first_run_title",
+        "First time here?",
+        "Lần đầu dùng?"},
+    {"cp.overview_first_run_body",
+        "JustInTime quietly tracks which apps and windows you use, so you "
+        "(or, if you choose, a linked family member) can see how time is "
+        "spent. Nothing is hidden: check \"Monitored By\" any time to see "
+        "exactly who can see this computer's activity, and revoke access "
+        "whenever you want.",
+        "JustInTime âm thầm ghi lại app/cửa sổ bạn dùng, để bạn (hoặc, nếu "
+        "bạn chọn, một thành viên gia đình đã liên kết) xem được thời gian "
+        "dùng máy. Không có gì bị giấu: xem mục \"Được giám sát bởi\" bất "
+        "cứ lúc nào để biết chính xác ai đang xem được hoạt động của máy "
+        "này, và thu hồi quyền xem bất cứ khi nào bạn muốn."},
+    {"cp.overview_no_data",       "No activity recorded yet today.",   "Chưa có hoạt động nào được ghi lại hôm nay."},
+
+    /* ---- LoginPage (trang "Account") ---- */
+    {"login.heading",            "Account",                             "Tài khoản"},
+    {"login.note",
+        "Log in to sync your activity to the cloud, link with a parent "
+        "account, or use Remote View / device messaging.",
+        "Đăng nhập để đồng bộ hoạt động lên đám mây, liên kết với tài "
+        "khoản phụ huynh, hoặc dùng Xem từ xa / nhắn tin liên máy."},
+    {"login.email_label",        "Email:",                              "Email:"},
+    {"login.password_label",     "Password:",                           "Mật khẩu:"},
+    {"login.login_btn",          "Log in",                              "Đăng nhập"},
+    {"login.signup_btn",         "Sign up",                             "Đăng ký"},
+    {"login.logout_btn",         "Log out",                             "Đăng xuất"},
+    {"login.logged_in_as",
+        "Logged in as <b>%1</b>.\n\nYour activity now syncs to the cloud.",
+        "Đã đăng nhập với <b>%1</b>.\n\nHoạt động của bạn giờ đồng bộ lên đám mây."},
+    {"login.enter_both",         "Please enter both email and password.", "Vui lòng nhập cả email và mật khẩu."},
+    {"login.logout_confirm",     "Log out of the current account?",     "Đăng xuất khỏi tài khoản hiện tại?"},
+    {"login.logout_done",
+        "Logged out. Data is still saved locally, but cloud sync is paused.",
+        "Đã đăng xuất. Dữ liệu vẫn được lưu cục bộ, nhưng đồng bộ đám mây tạm dừng."},
+    {"login.success",
+        "Logged in successfully! Your data will now sync to the cloud.",
+        "Đăng nhập thành công! Dữ liệu của bạn giờ sẽ đồng bộ lên đám mây."},
+
+    /* ---- RemoteViewPage ---- */
+    {"rview.heading",            "Remote View",                         "Xem từ xa"},
+    {"rview.enable_check",
+        "Enable Remote View (read-only, HTTP, unencrypted)",
+        "Bật Xem từ xa (chỉ đọc, HTTP, không mã hoá)"},
+    {"rview.port_label",         "Port:",                               "Cổng:"},
+    {"rview.token_label",        "Access token:",                       "Mã truy cập:"},
+    {"rview.regenerate_btn",     "Regenerate",                          "Tạo mã mới"},
+    {"rview.url_label",          "Status URL:",                         "URL trạng thái:"},
+    {"rview.copy_btn",           "Copy status URL",                     "Sao chép URL"},
+    {"rview.warning",
+        "Warning: this is plain HTTP, not encrypted. Only use it on a "
+        "trusted local network or VPN - do not expose this port directly "
+        "to the public internet.",
+        "Cảnh báo: đây là HTTP thường, không mã hoá. Chỉ nên dùng trong "
+        "mạng LAN/VPN tin cậy - không mở cổng này thẳng ra Internet công cộng."},
+    {"rview.save_btn",           "Save",                                "Lưu"},
+    {"rview.copied",             "Copied to clipboard.",                "Đã sao chép."},
+    {"rview.saved",              "Remote View settings saved.",         "Đã lưu cấu hình Xem từ xa."},
+
+    /* ---- SupabaseSetupPage ---- */
+    {"supabase.heading",         "Supabase Setup (Advanced)",           "Thiết lập Supabase (Nâng cao)"},
+    {"supabase.note",
+        "Only change this if you're running your own Supabase project "
+        "instead of the default one. Leave both fields empty to use the "
+        "built-in defaults.",
+        "Chỉ đổi mục này nếu bạn tự chạy project Supabase riêng thay vì "
+        "dùng mặc định. Để trống cả 2 ô để dùng giá trị mặc định sẵn có."},
+    {"supabase.url_label",       "Supabase URL:",                       "Supabase URL:"},
+    {"supabase.key_label",       "Publishable Key:",                    "Publishable Key:"},
+    {"supabase.save_btn",        "Save",                                "Lưu"},
+    {"supabase.saved",           "Supabase configuration saved.",       "Đã lưu cấu hình Supabase."},
 
     {NULL, NULL, NULL}
 };

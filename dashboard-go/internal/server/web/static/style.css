@@ -183,6 +183,27 @@ a { color: #5aa9ff; }
     border-radius: 14px;
     padding: 18px;
     position: relative;
+    /*
+     * FIX: panel không có margin-bottom trước đây, nên 2 .panel
+     * đứng cạnh nhau mà không có .section-title xen giữa (ví dụ
+     * khối "Machines" nối liền "System Performance" ở tab Overview)
+     * bị dính sát viền vào nhau, trông như 1 khối duy nhất. .grid
+     * đã tự có "gap" giữa các panel con của nó nên không bị ảnh
+     * hưởng gì thêm, chỉ có thêm 1 khoảng trắng nhỏ phía dưới mỗi
+     * hàng trước khi sang section tiếp theo - hợp lý.
+     */
+    margin-bottom: 20px;
+}
+
+/*
+ * .grid đã tự canh khoảng cách giữa các item con bằng "gap" (và
+ * margin-bottom cho cả khối .grid) - nên .panel nằm BÊN TRONG 1
+ * .grid thì bỏ margin-bottom riêng, tránh cộng dồn 2 lớp khoảng
+ * cách (gap + margin) làm layout không đều giữa nơi có/không có
+ * grid bao ngoài.
+ */
+.grid > .panel {
+    margin-bottom: 0;
 }
 
 .panel::before {
@@ -798,6 +819,93 @@ canvas { max-height: 320px; }
 .timeline-item .timeline-time { font-size: 11px; color: #4a6584; }
 .timeline-item .timeline-title { font-size: 13px; color: #eef4fb; font-weight: 600; margin: 2px 0; }
 .timeline-item .timeline-sub { font-size: 12px; color: #7e9ac0; }
+
+/* ---- Visual 24h timeline strip (see /api/local/timeline) ---- */
+.timeline-strip {
+    position: relative;
+    height: 44px;
+    background: #0b0d18;
+    border: 1px solid #1c3a5e;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.timeline-segment {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 2px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.timeline-segment:hover { opacity: 0.75; }
+.timeline-ruler {
+    position: relative;
+    height: 16px;
+    margin-top: 4px;
+    font-size: 10px;
+    color: #4a6584;
+}
+.timeline-ruler span {
+    position: absolute;
+    transform: translateX(-50%);
+}
+.timeline-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-top: 14px;
+}
+.timeline-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #b9c8de;
+}
+.timeline-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: none;
+}
+
+/* ---- AI Chatbot (usage Q&A) ---- */
+.chat-messages {
+    max-height: 340px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 2px;
+}
+.chat-msg {
+    max-width: 80%;
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+.chat-msg.user {
+    align-self: flex-end;
+    background: #2f7de1;
+    color: #ffffff;
+    border-bottom-right-radius: 2px;
+}
+.chat-msg.model {
+    align-self: flex-start;
+    background: #10233d;
+    border: 1px solid #1c3a5e;
+    color: #dce8f7;
+    border-bottom-left-radius: 2px;
+}
+.chat-msg.pending { opacity: 0.6; font-style: italic; }
+
+.device-chip.active {
+    background: #2f7de1 !important;
+    border-color: #2f7de1 !important;
+    color: #fff;
+}
 
 .quick-actions-grid {
     display: grid;

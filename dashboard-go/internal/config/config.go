@@ -7,9 +7,13 @@
 package config
 
 import (
+	"bufio"
+	"crypto/rand"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const (
@@ -26,6 +30,7 @@ type Config struct {
 	ConfigDir   string
 	LocalDBPath string
 	DeviceID    string
+	DeviceLabel string
 	SupabaseURL string
 	SupabaseKey string
 }
@@ -42,19 +47,92 @@ func Dir() string {
 	return filepath.Join(home, ".justintime")
 }
 
-// deviceID mirrors get_device_id() in the C agent: the Windows computer
-// name (os.Hostname() returns the same NetBIOS name on Windows), so
-// device-to-device messages line up with the device_id already stamped
-// on every activity_logs row.
-func deviceID() string {
+// deviceIdentity reads (or creates) %APPDATA%\JustInTime\device.id -
+// the SAME file src/shared/device.c writes on the C agent side. Format
+// is 2 lines: the device_id ("PC-XXXXXXXX", a random id that carries
+// no personal info - it is NOT the Windows computer name anymore, see
+// device.c for why) and an optional user-chosen friendly label.
+//
+// Whichever of the two processes (agent or dashboard) runs first on a
+// given machine creates the file; the other one just reads it back, so
+// device_id always matches between them (needed for device-to-device
+// messaging, which is keyed by device_id).
+func deviceIdentity(dir string) (id string, label string) {
 	if v := os.Getenv("JUSTINTIME_DEVICE_ID"); v != "" {
-		return v
+		return v, ""
 	}
-	host, err := os.Hostname()
-	if err != nil || host == "" {
+
+	path := filepath.Join(dir, "device.id")
+
+	if f, err := os.Open(path); err == nil {
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+		if scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(line, "PC-") && len(line) == 11 {
+				id = line
+			}
+		}
+		if scanner.Scan() {
+			label = strings.TrimSpace(scanner.Text())
+		}
+	}
+
+	if id == "" {
+		id = generateDeviceID()
+		// Best-effort write; if it fails (e.g. read-only dir), we still
+		// have a usable id for this run, it just won't persist.
+		_ = os.WriteFile(path, []byte(id+"\n"+label+"\n"), 0o644)
+	}
+
+	return id, label
+}
+
+// generateDeviceID mirrors generate_random_id() in the C agent's
+// device.c: 4 cryptographically random bytes, formatted as "PC-XXXXXXXX".
+func generateDeviceID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
 		return "UNKNOWN-DEVICE"
 	}
-	return host
+	return fmt.Sprintf("PC-%02X%02X%02X%02X", b[0], b[1], b[2], b[3])
+}
+
+// DisplayLabel returns the friendly name to show in the UI: the
+// user-chosen label if one was set, otherwise a generic placeholder
+// derived from the device id - NEVER the real Windows computer name,
+// to avoid leaking it to anyone this account is shared/linked with
+// (e.g. a linked parent account).
+//
+// FIX (staleness / "dữ liệu máy không đồng bộ"): trước đây đọc
+// c.DeviceLabel - 1 field được nạp DUY NHẤT LÚC KHỞI ĐỘNG (Load()).
+// Nếu người dùng đổi tên máy sau đó (từ tray, hoặc sửa thẳng file),
+// dashboard đang chạy sẽ không bao giờ biết, và cứ gửi mãi cái tên
+// CŨ lên Supabase cho tới khi restart app - máy khác thấy tên máy
+// "đứng yên", không đồng bộ. Giờ đọc lại thẳng từ device.id mỗi lần
+// gọi (chỉ là 1 lần đọc file nhỏ ~vài chục byte, không đáng kể vì
+// hàm này chỉ được gọi mỗi 30s trong heartbeatLoop, không phải mỗi
+// request).
+func (c *Config) DisplayLabel() string {
+	if _, label := deviceIdentity(c.ConfigDir); label != "" {
+		return label
+	}
+	if c.DeviceLabel != "" {
+		return c.DeviceLabel
+	}
+	suffix := c.DeviceID
+	if len(suffix) > 4 {
+		suffix = suffix[len(suffix)-4:]
+	}
+	return "Computer " + suffix
+}
+
+// SetDeviceLabel persists a user-chosen friendly label for this device,
+// writing it to the same device.id file the C agent reads.
+func SetDeviceLabel(dir, id, label string) error {
+	path := filepath.Join(dir, "device.id")
+	return os.WriteFile(path, []byte(id+"\n"+label+"\n"), 0o644)
 }
 
 // Load resolves configuration for this run. Two env vars are supported
@@ -76,11 +154,14 @@ func Load() *Config {
 		}
 	}
 
+	id, label := deviceIdentity(dir)
+
 	return &Config{
 		Port:        port,
 		ConfigDir:   dir,
 		LocalDBPath: dbPath,
-		DeviceID:    deviceID(),
+		DeviceID:    id,
+		DeviceLabel: label,
 		SupabaseURL: SupabaseURL,
 		SupabaseKey: SupabaseAnonKey,
 	}

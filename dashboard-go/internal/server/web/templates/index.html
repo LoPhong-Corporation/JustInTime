@@ -193,8 +193,24 @@
             </table>
         </div>
 
-        <!-- Activity Timeline: this device's most recent tracked activity -->
-        <div class="section-title">Activity Timeline</div>
+        <!-- Activity Timeline: thanh 24h trực quan cho hôm nay, dùng
+             /api/local/timeline (mỗi ứng dụng 1 màu, hover xem chi
+             tiết) - danh sách text cũ (loadActivityTimeline) vẫn còn
+             bên dưới cho ai muốn xem dạng danh sách/cuộn được. -->
+        <div class="section-title">
+            {{.T.timeline_title}}
+            <span style="font-weight:normal; font-size:11px; color:#5aa9ff; cursor:pointer;" id="timeline-today-label"></span>
+        </div>
+        <div class="panel" style="margin-bottom:20px;">
+            <div id="timeline-visual-error"></div>
+            <div id="timeline-visual-strip" class="timeline-strip">
+                <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
+            </div>
+            <div id="timeline-visual-ruler" class="timeline-ruler"></div>
+            <div id="timeline-visual-legend" class="timeline-legend"></div>
+        </div>
+
+        <div class="section-title">{{.T.timeline_recent_title}}</div>
         <div class="panel">
             <div id="activity-timeline" class="timeline">
                 <p style="color:#4a6584; font-size:13px;">Loading…</p>
@@ -370,6 +386,20 @@
                 <ul id="insights-recommendations" style="margin:0; padding-left:20px;"></ul>
             </div>
         </div>
+
+        <!-- AI Chatbot: hỏi đáp tự do về dữ liệu dùng máy của chính
+             mình (dùng chung API key Gemini với AI Insights ở trên) -->
+        <div class="section-title">{{.T.chat_title}}</div>
+        <div class="panel" style="margin-bottom:20px;">
+            <p style="color:#7e9ac0; font-size:12px; margin-top:0;">{{.T.chat_note}}</p>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div id="chat-error"></div>
+            <form id="chat-form" style="display:flex; gap:8px; margin-top:10px;">
+                <input id="chat-input" type="text" autocomplete="off" placeholder="{{.T.chat_placeholder}}"
+                       style="flex:1; background:#000; border:1px solid #1c3a5e; color:#dce8f7; padding:8px 12px; border-radius:8px; font-family:inherit;">
+                <button type="submit" class="btn" id="chat-send-btn">{{.T.chat_send}}</button>
+            </form>
+        </div>
     </div>
 
     <!-- ============ CLOUD ============ -->
@@ -424,22 +454,20 @@
         <div id="devices-error"></div>
 
         <div class="panel" style="margin-bottom:20px;">
-            <div id="devices-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
-
-            <form id="send-form" style="display:flex; gap:8px; flex-wrap:wrap;">
-                <select id="target-device" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;"></select>
-                <select id="msg-kind" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
-                    <option value="message">{{.T.devices_kind_msg}}</option>
-                    <option value="data">{{.T.devices_kind_data}}</option>
-                </select>
-                <input id="msg-payload" type="text" placeholder="{{.T.devices_payload}}" style="flex:1;min-width:160px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
-                <button type="submit" class="btn">{{.T.devices_send}}</button>
-            </form>
+            <div id="devices-chips" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
         </div>
 
-        <div class="section-title">{{.T.devices_inbox}}</div>
-        <div class="panel">
-            <ul id="devices-inbox" style="list-style:none;margin:0;padding:0;display:grid;gap:8px;"></ul>
+        <div id="device-thread-panel" class="panel" style="display:none; margin-bottom:20px;">
+            <div class="section-title" style="margin-top:0;">
+                <span id="device-thread-title"></span>
+                <span><button type="button" class="btn btn-outline" id="btn-request-stats">{{.T.devices_request_stats}}</button></span>
+            </div>
+            <div id="device-thread-messages" class="chat-messages"></div>
+            <form id="device-thread-form" style="display:flex; gap:8px; margin-top:10px;">
+                <input id="device-thread-input" type="text" autocomplete="off" placeholder="{{.T.devices_payload}}"
+                       style="flex:1; background:#000; border:1px solid #1c3a5e; color:#dce8f7; padding:8px 12px; border-radius:8px; font-family:inherit;">
+                <button type="submit" class="btn">{{.T.devices_send}}</button>
+            </form>
         </div>
     </div>
 
@@ -460,7 +488,7 @@
         <div id="family-children-error"></div>
         <div class="panel" style="margin-bottom:20px;">
             <table>
-                <thead><tr><th>Email</th><th></th><th></th></tr></thead>
+                <thead><tr><th>Email</th><th>{{.T.family_permission_col}}</th><th></th><th></th></tr></thead>
                 <tbody id="family-children-body"></tbody>
             </table>
         </div>
@@ -521,6 +549,7 @@
         };
 
         const DEVICE_ID = {{json .DeviceID}};
+        const DEVICE_LABEL = {{json .DeviceLabel}};
 
         const LABELS = {
             cpuHigh: {{json .T.alert_cpu_high}},
@@ -530,6 +559,9 @@
             login: {{json .T.login}},
             noDevices: {{json .T.devices_none}},
             noMessages: {{json .T.devices_inbox_empty}},
+            devicesRequestedStats: {{json .T.devices_requested_stats}},
+            devicesTheyRequestedStats: {{json .T.devices_they_requested_stats}},
+            devicesShareStats: {{json .T.devices_share_stats}},
             familyNoChildren: {{json .T.family_children_none}},
             familyNoParents: {{json .T.family_parents_none}},
             familyNoLimits: {{json .T.family_limits_none}},
@@ -539,6 +571,9 @@
             familyStatusRevoked: {{json .T.family_status_revoked}},
             familyApprove: {{json .T.family_approve}},
             familyRevoke: {{json .T.family_revoke}},
+            familyPermFull: {{json .T.family_perm_full}},
+            familyPermViewOnly: {{json .T.family_perm_view_only}},
+            familyViewOnlyNotice: {{json .T.family_view_only_notice}},
             familyDeleteLimit: {{json .T.family_limit_delete}},
             familyNoLimitText: {{json .T.family_limit_nolimit}}
         };

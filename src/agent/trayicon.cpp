@@ -1,13 +1,8 @@
 // trayicon.cpp
 
 #include "trayicon.h"
-#include "logindialog.h"
-#include "settingsdialog.h"
-#include "supabasesetupdialog.h"
-#include "remoteviewdialog.h"
+#include "controlpanelwindow.h"
 #include "updatechecker.h"
-#include "parentlinkdialog.h"
-#include "parentdialog.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -85,6 +80,17 @@ QString tr_(const char *key)
 TrayIcon::TrayIcon(QObject *parent) : QObject(parent)
 {
     m_trayIcon.setIcon(qApp->style()->standardIcon(QStyle::SP_ComputerIcon));
+
+    /*
+     * Cửa sổ điều khiển trung tâm - tạo 1 lần, ẩn cho tới khi
+     * openTo() được gọi lần đầu (từ 1 trong các slot onXxx() bên
+     * dưới, hoặc khi bấm icon tray).
+     */
+    m_controlPanel = new ControlPanelWindow();
+    connect(m_controlPanel, &ControlPanelWindow::pauseToggleRequested, this, &TrayIcon::onTogglePause);
+    connect(m_controlPanel, &ControlPanelWindow::accountChanged, this, &TrayIcon::rebuildMenu);
+    connect(m_controlPanel, &ControlPanelWindow::settingsChanged, this, &TrayIcon::rebuildMenu);
+    m_controlPanel->setPaused(m_paused.load());
 
     m_accountAction = m_menu.addAction(QString());
     m_accountAction->setEnabled(false);
@@ -181,13 +187,20 @@ void TrayIcon::show()
 
 void TrayIcon::onActivated(QSystemTrayIcon::ActivationReason reason)
 {
-    Q_UNUSED(reason);
-
     /*
      * Đảm bảo trạng thái đăng nhập/tạm dừng luôn cập nhật
      * đúng trước khi hiện menu (vì có thể đổi từ dialog).
      */
     rebuildMenu();
+
+    /*
+     * Click trái (Trigger) hoặc double-click mở thẳng Control Panel
+     * ở trang Overview - đây là cách dễ nhất để người mới "vào"
+     * app lần đầu, thay vì phải dò menu chuột phải. Windows tự hiện
+     * context menu khi click phải, không cần xử lý gì thêm ở đây.
+     */
+    if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick)
+        m_controlPanel->openTo(ControlPanelWindow::PageOverview);
 }
 
 void TrayIcon::rebuildMenu()
@@ -253,10 +266,7 @@ void TrayIcon::updateTooltip()
 
 void TrayIcon::onLogin()
 {
-    LoginDialog dlg;
-
-    if (dlg.exec() == QDialog::Accepted)
-        rebuildMenu();
+    m_controlPanel->openTo(ControlPanelWindow::PageAccount);
 }
 
 void TrayIcon::onLogout()
@@ -283,6 +293,7 @@ void TrayIcon::onLogout()
 void TrayIcon::onTogglePause()
 {
     m_paused = !m_paused.load();
+    m_controlPanel->setPaused(m_paused.load());
     rebuildMenu();
 }
 
@@ -300,26 +311,17 @@ void TrayIcon::onViewReport()
 
 void TrayIcon::onSettings()
 {
-    SettingsDialog dlg;
-    dlg.exec();
-
-    /*
-     * Role (Con/Phụ huynh) hoặc các cấu hình khác có thể đã
-     * đổi - làm mới menu ngay, không cần khởi động lại app.
-     */
-    rebuildMenu();
+    m_controlPanel->openTo(ControlPanelWindow::PageSettings);
 }
 
 void TrayIcon::onSupabaseSetup()
 {
-    SupabaseSetupDialog dlg;
-    dlg.exec();
+    m_controlPanel->openTo(ControlPanelWindow::PageAdvanced);
 }
 
 void TrayIcon::onRemoteView()
 {
-    RemoteViewDialog dlg;
-    dlg.exec();
+    m_controlPanel->openTo(ControlPanelWindow::PageRemoteView);
 }
 
 void TrayIcon::onToggleDebugConsole()
@@ -454,8 +456,7 @@ void TrayIcon::onParentLinkSettings()
         return;
     }
 
-    ParentLinkDialog dlg;
-    dlg.exec();
+    m_controlPanel->openTo(ControlPanelWindow::PageParentLink);
 }
 
 void TrayIcon::onParentDashboard()
@@ -469,17 +470,12 @@ void TrayIcon::onParentDashboard()
         return;
     }
 
-    ParentDialog dlg;
-    dlg.exec();
+    m_controlPanel->openTo(ControlPanelWindow::PageFamily);
 }
 
 void TrayIcon::onAbout()
 {
-    QMessageBox::about(
-        nullptr,
-        tr_("about.title"),
-        tr_("about.body").arg(APP_VERSION, APP_PUBLISHER, APP_WEBSITE)
-    );
+    m_controlPanel->openTo(ControlPanelWindow::PageAbout);
 }
 
 void TrayIcon::onCheckForUpdates()

@@ -502,6 +502,7 @@ int activity_check_limits(
     EnterCriticalSection(&g_current_lock);
     wchar_t current_process[MAX_PATH] = {0};
     wcscpy_s(current_process, MAX_PATH, g_current_record.process_name);
+    time_t current_start_time = g_current_record.start_time;
     LeaveCriticalSection(&g_current_lock);
 
     if (current_process[0] == L'\0')
@@ -531,7 +532,36 @@ int activity_check_limits(
         }
         else if (limits[i].daily_limit_sec >= 0)
         {
+            /*
+             * BUG CŨ: db_get_today_seconds() chỉ cộng các bản ghi ĐÃ
+             * đóng trong activity_logs (INSERT chỉ xảy ra khi đổi cửa
+             * sổ / activity_suspend() - xem db_insert_activity()). Nếu
+             * người dùng cứ để nguyên app đang bị giới hạn ở foreground
+             * (không alt-tab đi đâu cả), phiên hiện tại KHÔNG BAO GIỜ
+             * được ghi vào DB cho tới khi nó tự đóng - nên used_today
+             * đứng yên mãi ở giá trị của các phiên trước đó, giới hạn
+             * không bao giờ kích hoạt dù đã dùng vượt quá rất lâu.
+             * Vá lỗi: cộng thêm thời gian của phiên đang mở (nếu đúng
+             * là process đang bị giới hạn và bắt đầu trong hôm nay).
+             */
             long used_today = db_get_today_seconds(current_process);
+
+            if (current_start_time > 0)
+            {
+                time_t now = time(NULL);
+                struct tm today_tm;
+                localtime_s(&today_tm, &now);
+                today_tm.tm_hour = 0;
+                today_tm.tm_min  = 0;
+                today_tm.tm_sec  = 0;
+                time_t day_start = mktime(&today_tm);
+
+                time_t open_session_start =
+                    (current_start_time > day_start) ? current_start_time : day_start;
+
+                if (now > open_session_start)
+                    used_today += (long)(now - open_session_start);
+            }
 
             if (used_today >= limits[i].daily_limit_sec)
             {

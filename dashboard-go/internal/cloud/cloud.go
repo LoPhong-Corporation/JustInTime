@@ -350,6 +350,37 @@ func (c *Client) Inbox(ctx context.Context, selfDeviceID string, limit int) ([]M
 	return out, nil
 }
 
+// Thread returns the two-way conversation between selfDeviceID and
+// otherDeviceID (both directions), oldest first - a proper chat
+// history instead of just "what's in my inbox". Still entirely
+// relayed through Supabase (see SendMessage) - never a direct
+// connection between the two machines.
+func (c *Client) Thread(ctx context.Context, selfDeviceID, otherDeviceID string, limit int) ([]Message, error) {
+	self := url.QueryEscape(selfDeviceID)
+	other := url.QueryEscape(otherDeviceID)
+
+	path := fmt.Sprintf(
+		"/rest/v1/device_messages?or=(and(sender_device_id.eq.%s,target_device_id.eq.%s),and(sender_device_id.eq.%s,target_device_id.eq.%s))&order=created_at.asc&limit=%d",
+		self, other, other, self, limit,
+	)
+
+	resp, err := c.request(ctx, http.MethodGet, path, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, readErr(resp)
+	}
+
+	var out []Message
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarkRead stamps read_at once the user has seen a message.
 func (c *Client) MarkRead(ctx context.Context, id int64) error {
 	body, _ := json.Marshal(map[string]string{
@@ -541,6 +572,69 @@ func (c *Client) RevokeLink(ctx context.Context, linkID int64) error {
 }
 
 // ---------------------------------------------------------------------
+// Permission levels (see migrations/005_permission_levels.sql) - RBAC
+// on top of parent_links: a parent-child link is either "full" (can
+// view + set/delete app limits) or "view_only" (can view usage only).
+// Read/written by SELECT/PATCH straight against the parent_links
+// table (not through the parent_links_for_parent RPC, whose SQL isn't
+// in this repo) - RLS already lets a parent see/edit their own link
+// rows, since that's exactly what ApproveLink/RevokeLink rely on too.
+// ---------------------------------------------------------------------
+
+type permissionRow struct {
+	ID              int64  `json:"id"`
+	PermissionLevel string `json:"permission_level"`
+}
+
+// ListPermissions returns permission_level keyed by parent_links.id,
+// for every link this account (as parent) owns. Links with no row
+// back yet (migration not applied, or a very old link) simply won't
+// appear in the map - callers should treat a missing entry as "full"
+// (the migration's default), matching pre-RBAC behavior.
+func (c *Client) ListPermissions(ctx context.Context) (map[int64]string, error) {
+	resp, err := c.request(ctx, http.MethodGet, "/rest/v1/parent_links?select=id,permission_level", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readErr(resp)
+	}
+
+	var rows []permissionRow
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, err
+	}
+
+	out := make(map[int64]string, len(rows))
+	for _, r := range rows {
+		out[r.ID] = r.PermissionLevel
+	}
+	return out, nil
+}
+
+// SetPermission updates the permission level for a parent_links row
+// this account owns as the parent. level must be "full" or
+// "view_only" - the DB CHECK constraint rejects anything else.
+func (c *Client) SetPermission(ctx context.Context, linkID int64, level string) error {
+	body, _ := json.Marshal(map[string]string{"permission_level": level})
+
+	resp, err := c.request(ctx, http.MethodPatch,
+		fmt.Sprintf("/rest/v1/parent_links?id=eq.%d", linkID),
+		body, map[string]string{"Prefer": "return=minimal"})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return readErr(resp)
+}
+
+// ---------------------------------------------------------------------
 // App limits (see migrations/004_parent_links.sql). Only ever readable/
 // writable by a parent with an "approved" link to that child — RLS
 // enforces this regardless of what this client sends.
@@ -671,7 +765,11 @@ func (c *Client) ActivityLogsForChild(ctx context.Context, childUserID string, s
 // ---------------------------------------------------------------------
 
 type DeviceHeartbeat struct {
-	DeviceID    string  `json:"device_id"`
+	DeviceID string `json:"device_id"`
+	// Hostname: despite the column name (kept as-is to avoid a Supabase
+	// migration), this is NOT the real Windows computer name anymore -
+	// see config.DisplayLabel(). It's an anonymized label ("Computer
+	// XXXX") or a name the user chose themselves.
 	Hostname    string  `json:"hostname"`
 	CPUPercent  float64 `json:"cpu_percent"`
 	RAMPercent  float64 `json:"ram_percent"`
@@ -681,11 +779,13 @@ type DeviceHeartbeat struct {
 
 // PushHeartbeat upserts this device's current status. user_id defaults
 // to auth.uid() server-side (see migration), so the client never needs
-// to know its own user id for this call.
-func (c *Client) PushHeartbeat(ctx context.Context, deviceID, hostname string, cpu, ram, disk float64) error {
+// to know its own user id for this call. "label" is an anonymized/
+// user-chosen display name (see config.DisplayLabel), never the real
+// hostname - callers must not pass a raw os.Hostname() here.
+func (c *Client) PushHeartbeat(ctx context.Context, deviceID, label string, cpu, ram, disk float64) error {
 	body, err := json.Marshal(map[string]any{
 		"device_id":    deviceID,
-		"hostname":     hostname,
+		"hostname":     label,
 		"cpu_percent":  cpu,
 		"ram_percent":  ram,
 		"disk_percent": disk,

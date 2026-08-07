@@ -430,6 +430,71 @@ function setFleetCounts(counts) {
 loadMachines();
 setInterval(loadMachines, 30000);
 
+// ---------------- Visual 24h Timeline strip ----------------
+
+function fmtClock(unixSec) {
+    return new Date(unixSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadTimelineVisual() {
+    const stripEl = document.getElementById('timeline-visual-strip');
+    const rulerEl = document.getElementById('timeline-visual-ruler');
+    const legendEl = document.getElementById('timeline-visual-legend');
+    const errorDiv = document.getElementById('timeline-visual-error');
+    const labelEl = document.getElementById('timeline-today-label');
+    if (!stripEl) return;
+
+    errorDiv.innerHTML = '';
+
+    try {
+        const res = await fetch('/api/local/timeline');
+        const data = await res.json();
+
+        if (data.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+            return;
+        }
+
+        if (labelEl) labelEl.textContent = data.date || '';
+
+        const segments = data.segments || [];
+
+        if (!segments.length) {
+            stripEl.innerHTML = `<p style="color:#4a6584; font-size:13px; padding:12px;">${LABELS.timelineNoData || 'No activity recorded yet today.'}</p>`;
+            legendEl.innerHTML = '';
+        } else {
+            stripEl.innerHTML = segments.map(s => `
+                <div class="timeline-segment"
+                     style="left:${s.start_pct}%; width:${s.width_pct}%; background:${s.color};"
+                     title="${s.process_name} — ${fmtClock(s.start_time)} to ${fmtClock(s.end_time)}${s.window_title ? ' — ' + s.window_title.substring(0, 60) : ''}">
+                </div>
+            `).join('');
+
+            const legend = data.legend || [];
+            legendEl.innerHTML = legend.map(l => `
+                <div class="timeline-legend-item">
+                    <span class="timeline-legend-dot" style="background:${l.color};"></span>
+                    ${l.process_name} — ${fmtDuration(l.total_seconds)}
+                </div>
+            `).join('');
+        }
+
+        // Vạch mốc giờ 0h/6h/12h/18h/24h dọc theo thanh - chỉ vẽ 1
+        // lần (không đổi giữa các lần refresh) để tránh giật hình.
+        if (!rulerEl.dataset.built) {
+            rulerEl.innerHTML = [0, 6, 12, 18, 24].map(h => `
+                <span style="left:${(h / 24) * 100}%;">${String(h).padStart(2, '0')}:00</span>
+            `).join('');
+            rulerEl.dataset.built = '1';
+        }
+    } catch (e) {
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+}
+
+loadTimelineVisual();
+setInterval(loadTimelineVisual, 30000);
+
 // ---------------- Activity Timeline (this device, local) ----------------
 
 async function loadActivityTimeline() {
@@ -801,26 +866,116 @@ async function loadLocalData() {
 }
 
 // ---------------- Devices (cross-device messaging by device_id, relayed via Supabase) ----------------
+//
+// Nâng cấp thành khung "chat" thật giữa 2 máy của cùng 1 tài khoản
+// (vd máy bàn <-> laptop), CỘNG thêm nút "Xem thống kê máy kia".
+// Vẫn 100% qua Supabase relay (device_messages) - KHÔNG có kết nối
+// trực tiếp máy-tới-máy nào cả, giữ đúng quyết định kiến trúc cũ.
 
-document.getElementById('send-form')?.addEventListener('submit', async (e) => {
+let deviceThreadTarget = null;
+let deviceSelfId = null;
+
+document.getElementById('btn-request-stats')?.addEventListener('click', async () => {
+    if (!deviceThreadTarget) return;
+    try {
+        await fetch('/api/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target_device_id: deviceThreadTarget, kind: 'data', payload: JSON.stringify({ type: 'stats_request' }) }),
+        });
+        loadDeviceThread();
+    } catch (e) {}
+});
+
+document.getElementById('device-thread-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const target_device_id = document.getElementById('target-device').value;
-    const kind = document.getElementById('msg-kind').value;
-    const payload = document.getElementById('msg-payload').value;
-    if (!target_device_id) return;
+    if (!deviceThreadTarget) return;
+
+    const input = document.getElementById('device-thread-input');
+    const text = input.value.trim();
+    if (!text) return;
 
     try {
         await fetch('/api/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ target_device_id, kind, payload }),
+            body: JSON.stringify({ target_device_id: deviceThreadTarget, kind: 'message', payload: text }),
         });
-        document.getElementById('msg-payload').value = '';
-        loadDevicesData();
-    } catch (e) {
-        // ignore — inbox refresh will surface any lingering error state
-    }
+        input.value = '';
+        loadDeviceThread();
+    } catch (e) {}
 });
+
+function renderThreadMessage(m) {
+    const isSelf = m.sender_device_id === deviceSelfId;
+    const side = isSelf ? 'user' : 'model';
+
+    // kind="data" mang payload JSON có ý nghĩa đặc biệt (yêu cầu/trả
+    // lời thống kê) - render đẹp thay vì in JSON thô.
+    if (m.kind === 'data') {
+        try {
+            const parsed = JSON.parse(m.payload);
+            if (parsed.type === 'stats_request') {
+                return isSelf
+                    ? `<div class="chat-msg ${side}">${LABELS.devicesRequestedStats}</div>`
+                    : `<div class="chat-msg ${side}">${LABELS.devicesTheyRequestedStats}
+                        <div style="margin-top:6px;"><button type="button" class="btn btn-outline" onclick="deviceShareStats()">${LABELS.devicesShareStats}</button></div>
+                       </div>`;
+            }
+            if (parsed.type === 'stats_reply') {
+                return `<div class="chat-msg ${side}">
+                    <strong>${parsed.label || m.sender_device_id}</strong><br>
+                    CPU ${parsed.cpu_percent?.toFixed(0)}% · RAM ${parsed.ram_percent?.toFixed(0)}% · Disk ${parsed.disk_percent?.toFixed(0)}%
+                </div>`;
+            }
+        } catch (e) { /* not JSON, fall through to raw text below */ }
+    }
+
+    return `<div class="chat-msg ${side}">${(m.payload || '').replace(/</g, '&lt;')}</div>`;
+}
+
+async function deviceShareStats() {
+    if (!deviceThreadTarget) return;
+    try {
+        await fetch('/api/devices/share-stats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target_device_id: deviceThreadTarget }),
+        });
+        loadDeviceThread();
+    } catch (e) {}
+}
+
+async function loadDeviceThread() {
+    if (!deviceThreadTarget) return;
+
+    const panel = document.getElementById('device-thread-panel');
+    const titleEl = document.getElementById('device-thread-title');
+    const messagesEl = document.getElementById('device-thread-messages');
+
+    panel.style.display = 'block';
+    titleEl.textContent = deviceThreadTarget;
+
+    try {
+        const res = await fetch(`/api/thread?device_id=${encodeURIComponent(deviceThreadTarget)}`);
+        const data = await res.json();
+        deviceSelfId = data.self_device_id || deviceSelfId;
+
+        const messages = data.messages || [];
+        messagesEl.innerHTML = messages.length
+            ? messages.map(renderThreadMessage).join('')
+            : `<p style="color:#4a6584; font-size:13px;">${LABELS.noMessages}</p>`;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    } catch (e) {
+        messagesEl.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+}
+
+function selectDeviceThread(deviceId) {
+    deviceThreadTarget = deviceId;
+    document.querySelectorAll('.device-chip').forEach(c => c.classList.toggle('active', c.dataset.deviceId === deviceId));
+    loadDeviceThread();
+}
 
 async function loadDevicesData() {
     const errorDiv = document.getElementById('devices-error');
@@ -831,9 +986,7 @@ async function loadDevicesData() {
         const devData = await devRes.json();
 
         const chips = document.getElementById('devices-chips');
-        const select = document.getElementById('target-device');
         chips.innerHTML = '';
-        select.innerHTML = '';
 
         if (!devData.logged_in) {
             errorDiv.innerHTML = `<div class="error-banner">${LABELS.loginRequired} — <a href="/login">${LABELS.login}</a></div>`;
@@ -842,37 +995,27 @@ async function loadDevicesData() {
         } else {
             devData.devices.forEach(d => {
                 const chip = document.createElement('span');
-                chip.style.cssText = 'background:#000;border:1px solid #1c3a5e;padding:4px 10px;border-radius:999px;font-size:12px;';
+                chip.className = 'device-chip' + (d === deviceThreadTarget ? ' active' : '');
+                chip.dataset.deviceId = d;
+                chip.style.cssText = 'cursor:pointer;background:#000;border:1px solid #1c3a5e;padding:6px 14px;border-radius:999px;font-size:12px;';
                 chip.textContent = d;
+                chip.addEventListener('click', () => selectDeviceThread(d));
                 chips.appendChild(chip);
-
-                const opt = document.createElement('option');
-                opt.value = d;
-                opt.textContent = d;
-                select.appendChild(opt);
             });
         }
 
-        const inboxRes = await fetch('/api/inbox');
-        const inboxData = await inboxRes.json();
-        const ul = document.getElementById('devices-inbox');
-
-        const messages = inboxData.messages || [];
-        ul.innerHTML = messages.length
-            ? messages.map(m => `
-                <li style="background:#000;border:1px solid #1c3a5e;border-radius:8px;padding:8px 12px;font-size:13px;">
-                    <strong>${m.sender_device_id}</strong> (${m.kind}): ${m.payload}
-                </li>
-            `).join('')
-            : `<li style="color:#4a6584; list-style:none;">${LABELS.noMessages}</li>`;
+        if (deviceThreadTarget) loadDeviceThread();
     } catch (e) {
         errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
     }
 }
 
+setInterval(() => { if (deviceThreadTarget) loadDeviceThread(); }, 15000);
+
 // ---------------- Family (consent-based parent/child linking + app limits) ----------------
 
 let familySelectedChildId = null;
+let familySelectedChildPermission = 'full';
 let familyChart = null;
 
 async function loadFamilyData() {
@@ -935,7 +1078,7 @@ async function loadFamilyChildren() {
         const tbody = document.getElementById('family-children-body');
 
         if (!links.length) {
-            tbody.innerHTML = `<tr><td colspan="3" style="color:#4a6584;">${LABELS.familyNoChildren}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" style="color:#4a6584;">${LABELS.familyNoChildren}</td></tr>`;
             return;
         }
 
@@ -944,7 +1087,15 @@ async function loadFamilyChildren() {
                 <td>${l.other_email}</td>
                 <td>${familyStatusLabel(l.status)}</td>
                 <td>
-                    ${l.status !== 'revoked' ? `<button type="button" class="btn btn-outline" onclick="familySelectChild('${l.other_user_id}', this)">${l.status === 'approved' ? '→' : '...'}</button>` : ''}
+                    ${l.status === 'approved' ? `
+                        <select onchange="familySetPermission(${l.id}, this.value)" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:4px 8px;border-radius:6px;font-family:inherit;">
+                            <option value="full" ${l.permission_level !== 'view_only' ? 'selected' : ''}>${LABELS.familyPermFull}</option>
+                            <option value="view_only" ${l.permission_level === 'view_only' ? 'selected' : ''}>${LABELS.familyPermViewOnly}</option>
+                        </select>
+                    ` : ''}
+                </td>
+                <td>
+                    ${l.status !== 'revoked' ? `<button type="button" class="btn btn-outline" onclick="familySelectChild('${l.other_user_id}', this, '${l.permission_level || 'full'}')">${l.status === 'approved' ? '→' : '...'}</button>` : ''}
                     ${l.status !== 'revoked' ? `<button type="button" class="btn btn-outline" onclick="familyRevokeLink(${l.id})">${LABELS.familyRevoke}</button>` : ''}
                 </td>
             </tr>
@@ -952,6 +1103,22 @@ async function loadFamilyChildren() {
     } catch (e) {
         errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
     }
+}
+
+async function familySetPermission(id, level) {
+    try {
+        const res = await fetch('/api/parent/permission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, permission_level: level }),
+        });
+        const data = await res.json();
+        if (data.error) {
+            document.getElementById('family-children-error').innerHTML =
+                `<div class="error-banner">${data.error}</div>`;
+            loadFamilyChildren(); // khôi phục dropdown về giá trị thật trên server
+        }
+    } catch (e) {}
 }
 
 async function familyRevokeLink(id) {
@@ -977,8 +1144,9 @@ async function familyApproveLink(id) {
     } catch (e) {}
 }
 
-function familySelectChild(childUserId, btn) {
+function familySelectChild(childUserId, btn, permissionLevel) {
     familySelectedChildId = childUserId;
+    familySelectedChildPermission = permissionLevel || 'full';
     document.getElementById('family-limits-hint').textContent = '';
     loadFamilyLimits();
     loadFamilyChildSummary();
@@ -1004,7 +1172,7 @@ async function loadFamilyLimits() {
             return;
         }
 
-        hint.textContent = '';
+        hint.textContent = familySelectedChildPermission === 'view_only' ? LABELS.familyViewOnlyNotice : '';
         const limits = data.limits || [];
 
         tbody.innerHTML = limits.length
@@ -1012,7 +1180,7 @@ async function loadFamilyLimits() {
                 <tr>
                     <td>${l.process_name}</td>
                     <td>${l.blocked ? '—' : (l.daily_limit_sec != null ? Math.round(l.daily_limit_sec / 60) + ' min/day' : LABELS.familyNoLimitText)}</td>
-                    <td><button type="button" class="btn btn-outline" onclick="familyDeleteLimit(${l.id})">${LABELS.familyDeleteLimit}</button></td>
+                    <td>${familySelectedChildPermission === 'view_only' ? '' : `<button type="button" class="btn btn-outline" onclick="familyDeleteLimit(${l.id})">${LABELS.familyDeleteLimit}</button>`}</td>
                 </tr>
             `).join('')
             : `<tr><td colspan="3" style="color:#4a6584;">${LABELS.familyNoLimits}</td></tr>`;
@@ -1026,6 +1194,14 @@ document.getElementById('limit-form')?.addEventListener('submit', async (e) => {
 
     if (!familySelectedChildId) {
         document.getElementById('family-limits-hint').textContent = LABELS.familySelectChild;
+        return;
+    }
+
+    // RBAC (chỉ để phản hồi nhanh trên UI - luật thật nằm ở server,
+    // xem handleParentLimitSet() trong server.go): "view_only" thì
+    // không cho gửi request luôn, đỡ phải chờ lỗi 403 quay về.
+    if (familySelectedChildPermission === 'view_only') {
+        document.getElementById('family-limits-hint').textContent = LABELS.familyViewOnlyNotice;
         return;
     }
 
@@ -1057,7 +1233,7 @@ async function familyDeleteLimit(id) {
         await fetch('/api/parent/limits/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id }),
+            body: JSON.stringify({ id, child_user_id: familySelectedChildId || '' }),
         });
         loadFamilyLimits();
     } catch (e) {}
@@ -1148,6 +1324,22 @@ async function loadFamilyParents() {
 
 // ---------------- AI Insights (on-demand, opt-in) ----------------
 
+// BUG CŨ: 2 nút "Local"/"Cloud" (.insights-source-btn) có trong HTML
+// nhưng KHÔNG có bất kỳ JS nào gắn sự kiện click cho chúng, và nút
+// "Generate" luôn fetch '/api/local/insights' KHÔNG kèm ?source=,
+// nên bấm "Cloud" không đổi được gì cả - luôn dùng dữ liệu local dù
+// người dùng chọn Cloud. Giờ theo dõi source đang chọn + gửi đúng
+// tham số.
+let insightsSource = 'local';
+
+document.querySelectorAll('.insights-source-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        insightsSource = btn.dataset.insightsSource || 'local';
+        document.querySelectorAll('.insights-source-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    });
+});
+
 document.getElementById('btn-generate-insights')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-generate-insights');
     const errorDiv = document.getElementById('insights-error');
@@ -1160,7 +1352,7 @@ document.getElementById('btn-generate-insights')?.addEventListener('click', asyn
     btn.disabled = true;
 
     try {
-        const res = await fetch('/api/local/insights');
+        const res = await fetch(`/api/local/insights?source=${encodeURIComponent(insightsSource)}`);
         const data = await res.json();
 
         loadingDiv.style.display = 'none';
@@ -1190,5 +1382,65 @@ document.getElementById('btn-generate-insights')?.addEventListener('click', asyn
         loadingDiv.style.display = 'none';
         btn.disabled = false;
         errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+});
+
+// ---------------- AI Chatbot (usage Q&A, opt-in) ----------------
+
+let chatHistory = [];
+
+function renderChatMessages() {
+    const el = document.getElementById('chat-messages');
+    if (!el) return;
+    el.innerHTML = chatHistory.map(m => `
+        <div class="chat-msg ${m.role}${m.pending ? ' pending' : ''}">${m.text.replace(/</g, '&lt;')}</div>
+    `).join('');
+    el.scrollTop = el.scrollHeight;
+}
+
+document.getElementById('chat-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const input = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('chat-send-btn');
+    const errorDiv = document.getElementById('chat-error');
+    const text = input.value.trim();
+    if (!text) return;
+
+    errorDiv.innerHTML = '';
+    chatHistory.push({ role: 'user', text });
+    chatHistory.push({ role: 'model', text: '…', pending: true });
+    renderChatMessages();
+    input.value = '';
+    input.disabled = true;
+    sendBtn.disabled = true;
+
+    try {
+        // Gửi lịch sử KHÔNG kèm tin nhắn "pending" (nó chỉ là chỗ giữ
+        // chỗ trên UI trong lúc chờ, chưa phải câu trả lời thật).
+        const historyForApi = chatHistory.filter(m => !m.pending).map(m => ({ role: m.role, text: m.text }));
+
+        const res = await fetch('/api/local/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ history: historyForApi }),
+        });
+        const data = await res.json();
+
+        chatHistory.pop(); // bỏ tin nhắn "pending"
+
+        if (data.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+        } else {
+            chatHistory.push({ role: 'model', text: data.reply || '' });
+        }
+    } catch (err) {
+        chatHistory.pop();
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${err}</div>`;
+    } finally {
+        renderChatMessages();
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
     }
 });
