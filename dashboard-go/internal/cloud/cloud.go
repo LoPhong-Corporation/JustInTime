@@ -93,6 +93,40 @@ func Login(ctx context.Context, baseURL, apiKey, email, password string) (*Sessi
 	return parseSessionResponse(resp.Body)
 }
 
+// Logout revokes a session server-side via GoTrue's /auth/v1/logout.
+// scope is "" (just this session's refresh token) or "global" (every
+// refresh token for this user, on every device/browser — see
+// "Sign out everywhere" in Settings). This matters because clearing
+// the LOCAL session file alone (what this app used to do) never told
+// Supabase anything: a leaked access/refresh token pair would keep
+// working right up until it naturally expired, logout or not.
+func Logout(ctx context.Context, baseURL, apiKey, accessToken, scope string) error {
+	url := baseURL + "/auth/v1/logout"
+	if scope != "" {
+		url += "?scope=" + scope
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", apiKey)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// GoTrue trả 204 khi thành công; 401 nghĩa là token đã hết hạn/bị
+	// thu hồi từ trước - coi như đã "logout" rồi, không phải lỗi thật.
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusUnauthorized {
+		return nil
+	}
+	return decodeAuthError(resp)
+}
+
 // RefreshSession exchanges a refresh_token for a new access_token, same
 // as supabase_client.refresh_session().
 func RefreshSession(ctx context.Context, baseURL, apiKey, refreshToken string) (*Session, error) {
@@ -135,6 +169,54 @@ func parseSessionResponse(r io.Reader) (*Session, error) {
 		RefreshToken: raw.RefreshToken,
 		UserID:       raw.User.ID,
 		Email:        raw.User.Email,
+	}, nil
+}
+
+// SessionFromOAuthTokens builds a Session from an access_token +
+// refresh_token pair obtained via Supabase's OAuth redirect flow (see
+// handleAuthOAuthCallback in server.go) - unlike Login()/RefreshSession()
+// there's no grant call here, since the tokens already came straight
+// from GoTrue; this just verifies the access_token is real and fetches
+// the user's id/email by calling GET /auth/v1/user with it (the same
+// endpoint any Supabase client SDK calls after an OAuth redirect).
+func SessionFromOAuthTokens(ctx context.Context, baseURL, apiKey, accessToken, refreshToken string) (*Session, error) {
+	if accessToken == "" || refreshToken == "" {
+		return nil, &AuthError{Message: "missing access_token or refresh_token"}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/auth/v1/user", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", apiKey)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, decodeAuthError(resp)
+	}
+
+	var user struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, err
+	}
+	if user.Email == "" {
+		return nil, &AuthError{Message: "OAuth provider did not return an email address"}
+	}
+
+	return &Session{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		UserID:       user.ID,
+		Email:        user.Email,
 	}, nil
 }
 
@@ -829,6 +911,27 @@ func (c *Client) ListHeartbeats(ctx context.Context) ([]DeviceHeartbeat, error) 
 		return nil, err
 	}
 	return out, nil
+}
+
+// DeleteHeartbeat removes a device_heartbeats row for this account by
+// device_id — lets the person clean up stale/legacy entries (e.g. a
+// device that reported its real Windows computer name before the
+// anonymization fix, or a machine that's simply retired). RLS already
+// scopes this to rows the caller's own user_id owns; there's nothing
+// else to check here.
+func (c *Client) DeleteHeartbeat(ctx context.Context, deviceID string) error {
+	resp, err := c.request(ctx, http.MethodDelete,
+		fmt.Sprintf("/rest/v1/device_heartbeats?device_id=eq.%s", url.QueryEscape(deviceID)),
+		nil, map[string]string{"Prefer": "return=minimal"})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return readErr(resp)
 }
 
 // ListHeartbeatsForChild returns heartbeats for a specific child

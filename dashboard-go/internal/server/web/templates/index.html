@@ -102,6 +102,36 @@
             </div>
         </div>
 
+        <!-- REORDERED (theo yêu cầu): 1) thời gian dùng máy trước tiên,
+             2) danh sách máy, 3) mọi thứ còn lại (CPU/RAM/Disk/Network,
+             hiệu năng, alert, tiến trình, cấu hình...) xuống dưới cùng. -->
+
+        <!-- 1) Activity Timeline: thanh 24h trực quan cho hôm nay, dùng
+             /api/local/timeline (mỗi ứng dụng 1 màu, hover xem chi
+             tiết) - danh sách text cũ (loadActivityTimeline) vẫn còn
+             bên dưới cho ai muốn xem dạng danh sách/cuộn được. -->
+        <div class="section-title">
+            {{.T.timeline_title}}
+            <span style="font-weight:normal; font-size:11px; color:#5aa9ff; cursor:pointer;" id="timeline-today-label"></span>
+        </div>
+        <div class="panel" style="margin-bottom:20px;">
+            <div id="timeline-visual-error"></div>
+            <div id="timeline-visual-strip" class="timeline-strip">
+                <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
+            </div>
+            <div id="timeline-visual-ruler" class="timeline-ruler"></div>
+            <div id="timeline-visual-legend" class="timeline-legend"></div>
+        </div>
+
+        <!-- 2) Machines: every device on this account, via device_heartbeats -->
+        <div class="section-title">Machines</div>
+        <div id="machines-error"></div>
+        <div class="panel" style="margin-bottom:20px;">
+            <div id="machines-list"><p style="color:#4a6584;">Loading…</p></div>
+        </div>
+
+        <!-- 3) Mọi thứ còn lại: số liệu CPU/RAM/Disk/Network, hiệu năng,
+             alert, tiến trình, agent status, cấu hình máy... -->
         <div class="grid cols-4">
             <div class="stat-card">
                 <div class="stat-card-head">
@@ -156,13 +186,6 @@
             </div>
         </div>
 
-        <!-- Machines: every device on this account, via device_heartbeats -->
-        <div class="section-title">Machines</div>
-        <div id="machines-error"></div>
-        <div class="panel">
-            <div id="machines-list"><p style="color:#4a6584;">Loading…</p></div>
-        </div>
-
         <div class="panel">
             <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700;">System Performance</h3>
             <div class="stat-subtitle" style="margin:-8px 0 14px 0;">Realtime Performance Overview</div>
@@ -191,23 +214,6 @@
                 </thead>
                 <tbody id="process-body"><tr><td colspan="5" style="color:#4a6584;">Loading…</td></tr></tbody>
             </table>
-        </div>
-
-        <!-- Activity Timeline: thanh 24h trực quan cho hôm nay, dùng
-             /api/local/timeline (mỗi ứng dụng 1 màu, hover xem chi
-             tiết) - danh sách text cũ (loadActivityTimeline) vẫn còn
-             bên dưới cho ai muốn xem dạng danh sách/cuộn được. -->
-        <div class="section-title">
-            {{.T.timeline_title}}
-            <span style="font-weight:normal; font-size:11px; color:#5aa9ff; cursor:pointer;" id="timeline-today-label"></span>
-        </div>
-        <div class="panel" style="margin-bottom:20px;">
-            <div id="timeline-visual-error"></div>
-            <div id="timeline-visual-strip" class="timeline-strip">
-                <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
-            </div>
-            <div id="timeline-visual-ruler" class="timeline-ruler"></div>
-            <div id="timeline-visual-legend" class="timeline-legend"></div>
         </div>
 
         <div class="section-title">{{.T.timeline_recent_title}}</div>
@@ -562,6 +568,13 @@
             devicesRequestedStats: {{json .T.devices_requested_stats}},
             devicesTheyRequestedStats: {{json .T.devices_they_requested_stats}},
             devicesShareStats: {{json .T.devices_share_stats}},
+            machineGenericName: {{json .T.machine_generic_name}},
+            machineLegacyName: {{json .T.machine_legacy_name}},
+            machineLegacyBadge: {{json .T.machine_legacy_badge}},
+            machineLegacyTooltip: {{json .T.machine_legacy_tooltip}},
+            machineHiddenId: {{json .T.machine_hidden_id}},
+            machineRemoveBtn: {{json .T.machine_remove_btn}},
+            machineRemoveConfirm: {{json .T.machine_remove_confirm}},
             familyNoChildren: {{json .T.family_children_none}},
             familyNoParents: {{json .T.family_parents_none}},
             familyNoLimits: {{json .T.family_limits_none}},

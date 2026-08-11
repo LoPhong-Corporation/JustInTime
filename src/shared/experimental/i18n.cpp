@@ -1,20 +1,36 @@
 //
-// i18n.c
+// i18n.cpp
+//
+// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
+// extern "C" trong i18n.h. BẢNG DỊCH GIỮ NGUYÊN 100% (copy y hệt từ
+// bản STABLE, không dịch lại/không đổi bất kỳ chuỗi nào) - chỉ khác
+// CÁCH TRA CỨU:
+//   - Bản STABLE: quét tuyến tính (O(n)) qua mảng g_entries mỗi lần
+//     gọi i18n_t() - với ~150 dòng dịch, không chậm tới mức đáng lo,
+//     nhưng vẫn là chỗ có thể cải thiện rõ ràng.
+//   - Bản EXPERIMENTAL: dựng 1 std::unordered_map<string,Entry> MỘT
+//     LẦN DUY NHẤT (magic static, an toàn luồng) từ chính mảng dữ
+//     liệu này, tra cứu sau đó là O(1) trung bình.
 //
 
 #include "i18n.h"
 #include "settings.h"
 
-#include <string.h>
+#include <cstring>
+#include <string>
+#include <unordered_map>
 
-typedef struct
+namespace {
+
+struct I18nEntry
 {
     const char* key;
     const char* en;
     const char* vi;
-} I18nEntry;
+};
 
-static const I18nEntry g_entries[] = {
+const I18nEntry g_entries[] = {
+
 
     /* ---- Tray menu ---- */
     {"tray.login",              "Log in / Sign up...",               "Đăng nhập / Đăng ký..."},
@@ -199,6 +215,7 @@ static const I18nEntry g_entries[] = {
     {"cp.nav_family",         "Family",                             "Gia đình"},
     {"cp.nav_advanced",       "Advanced",                           "Nâng cao"},
     {"cp.nav_about",          "About",                              "Giới thiệu"},
+    {"cp.nav_development",    "Development",                        "Phát triển"},
 
     {"cp.overview_greeting_in",
         "Welcome back",
@@ -236,6 +253,15 @@ static const I18nEntry g_entries[] = {
         "cứ lúc nào để biết chính xác ai đang xem được hoạt động của máy "
         "này, và thu hồi quyền xem bất cứ khi nào bạn muốn."},
     {"cp.overview_no_data",       "No activity recorded yet today.",   "Chưa có hoạt động nào được ghi lại hôm nay."},
+    {"cp.overview_machines_title",       "Machines",                            "Các máy"},
+    {"cp.overview_machines_this_device", "(this device)",                       "(máy này)"},
+    {"cp.overview_machines_login_required",
+        "Log in to see every device linked to your account.",
+        "Đăng nhập để xem mọi thiết bị liên kết với tài khoản của bạn."},
+    {"cp.overview_machines_none", "No other devices have reported in yet.", "Chưa có thiết bị nào khác gửi tín hiệu."},
+    {"cp.overview_dashboard_missing",
+        "Could not find the web dashboard (%1). Make sure JustInTime Dashboard is installed in the same folder as this app.",
+        "Không tìm thấy dashboard web (%1). Hãy chắc chắn JustInTime Dashboard đã được cài cùng thư mục với app này."},
 
     /* ---- LoginPage (trang "Account") ---- */
     {"login.heading",            "Account",                             "Tài khoản"},
@@ -294,8 +320,55 @@ static const I18nEntry g_entries[] = {
     {"supabase.save_btn",        "Save",                                "Lưu"},
     {"supabase.saved",           "Supabase configuration saved.",       "Đã lưu cấu hình Supabase."},
 
+    /* ---- Development page (build info - dành cho dev/người tò mò,
+       KHÔNG phải cấu hình người dùng thường cần đụng vào) ---- */
+    {"dev.subtitle",
+        "Build/technical information - most people never need this page.",
+        "Thông tin kỹ thuật/build - hầu hết mọi người không cần trang này."},
+    {"dev.core_mode_title",   "Core implementation",                "Lõi đang dùng"},
+    {"dev.badge_stable",      "STABLE (C)",                          "STABLE (C)"},
+    {"dev.badge_experimental","EXPERIMENTAL (C++)",                  "EXPERIMENTAL (C++)"},
+    {"dev.core_desc_stable",
+        "This build uses the original, battle-tested C implementation "
+        "for the core data/network modules. This is the recommended "
+        "choice for everyday use.",
+        "Bản build này dùng lõi C gốc, đã chạy ổn định lâu dài cho các "
+        "module dữ liệu/mạng cốt lõi. Đây là lựa chọn khuyến nghị cho "
+        "dùng hàng ngày."},
+    {"dev.core_desc_experimental",
+        "This build uses the newer C++ rewrite (RAII, std::string, "
+        "std::mutex...) for the same modules. It hasn't run in the "
+        "field long enough to be considered as proven as the Stable "
+        "build yet - useful for development and comparison, not "
+        "recommended as your only build.",
+        "Bản build này dùng bản viết lại C++ mới hơn (RAII, "
+        "std::string, std::mutex...) cho cùng các module. Chưa chạy đủ "
+        "lâu ngoài thực tế để coi là ổn định như bản Stable - hữu ích "
+        "để phát triển/so sánh, không khuyến nghị dùng làm bản duy "
+        "nhất."},
+    {"dev.switch_title",      "Switching modes",                     "Đổi chế độ"},
+    {"dev.switch_body",
+        "cmake -DJUSTINTIME_CORE=STABLE ..\ncmake -DJUSTINTIME_CORE=EXPERIMENTAL ..\n\n"
+        "Chosen at build time only - rebuild the app to switch.",
+        "cmake -DJUSTINTIME_CORE=STABLE ..\ncmake -DJUSTINTIME_CORE=EXPERIMENTAL ..\n\n"
+        "Chỉ chọn được lúc build - phải build lại app để đổi."},
+
     {NULL, NULL, NULL}
 };
+
+const std::unordered_map<std::string, const I18nEntry*>& lookupTable()
+{
+    static const std::unordered_map<std::string, const I18nEntry*> table = []
+    {
+        std::unordered_map<std::string, const I18nEntry*> m;
+        for (int i = 0; g_entries[i].key != nullptr; i++)
+            m.emplace(g_entries[i].key, &g_entries[i]);
+        return m;
+    }();
+    return table;
+}
+
+} // namespace
 
 const char* i18n_t(const char* key)
 {
@@ -305,11 +378,11 @@ const char* i18n_t(const char* key)
     AppSettings s;
     settings_get(&s);
 
-    for (int i = 0; g_entries[i].key != NULL; i++)
-    {
-        if (strcmp(g_entries[i].key, key) == 0)
-            return (s.language == APP_LANG_VI) ? g_entries[i].vi : g_entries[i].en;
-    }
+    const auto& table = lookupTable();
+    const auto it = table.find(key);
 
-    return key;
+    if (it == table.end())
+        return key;
+
+    return (s.language == APP_LANG_VI) ? it->second->vi : it->second->en;
 }

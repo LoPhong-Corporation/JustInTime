@@ -21,6 +21,7 @@ class QListWidgetItem;
 class QStackedWidget;
 class QLabel;
 class QPushButton;
+class QVBoxLayout;
 
 class LoginPage;
 class SettingsPage;
@@ -43,7 +44,8 @@ public:
         PageParentLink,   // "Monitored By" - chỉ hiện khi role = CHILD
         PageFamily,       // "Family"       - chỉ hiện khi role = PARENT
         PageAdvanced,     // Supabase setup
-        PageAbout
+        PageAbout,
+        PageDevelopment   // build info: chế độ core Stable/Experimental...
     };
 
     explicit ControlPanelWindow(QWidget *parent = nullptr);
@@ -98,10 +100,12 @@ private slots:
     void onSidebarRowChanged(int row);
     void onLoggedInOrOut();
     void onSettingsSaved();
+    void openWebDashboard();
 
 private:
     void buildOverviewPage();
     void buildAboutPage();
+    void buildDevelopmentPage();
     void applyStylesheet();
     void refreshSidebarVisibility();
     void refreshOverview();
@@ -118,7 +122,10 @@ private:
     QLabel   *m_overviewStatus    = nullptr;
     QPushButton *m_overviewLoginBtn = nullptr;
     QPushButton *m_overviewPauseBtn = nullptr;
-    QLabel   *m_overviewToday     = nullptr;
+    QVBoxLayout *m_overviewTodayList    = nullptr; // 1 dòng/app, có icon
+    QLabel      *m_overviewTodayEmpty   = nullptr;
+    QVBoxLayout *m_overviewMachinesList = nullptr; // 1 dòng/máy, giống Machines bên Go
+    QLabel      *m_overviewMachinesEmpty = nullptr;
     bool      m_paused            = false;
 
     LoginPage          *m_loginPage;
@@ -139,4 +146,5 @@ private:
     int m_rowFamily     = -1;
     int m_rowAdvanced   = -1;
     int m_rowAbout      = -1;
+    int m_rowDevelopment = -1;
 };

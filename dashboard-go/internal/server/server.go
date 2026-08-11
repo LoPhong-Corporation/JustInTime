@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -165,6 +166,9 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/", s.handleIndex)
 	s.mux.HandleFunc("/login", s.handleLoginPage)
+	s.mux.HandleFunc("/auth/oauth/start", s.handleOAuthStart)
+	s.mux.HandleFunc("/auth/oauth/callback", s.handleOAuthCallback)
+	s.mux.HandleFunc("/auth/oauth/complete", s.handleOAuthComplete)
 	s.mux.HandleFunc("/logout", s.handleLogoutPage)
 	s.mux.HandleFunc("/settings", s.handleSettingsPage)
 	s.mux.HandleFunc("/report", s.handleReportPage)
@@ -173,6 +177,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 	s.mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
 	s.mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
+	s.mux.HandleFunc("/api/auth/logout-everywhere", s.handleAuthLogoutEverywhere)
 
 	s.mux.HandleFunc("/api/system/info", s.handleSystemInfo)
 	s.mux.HandleFunc("/api/system/network-interfaces", s.handleNetworkInterfaces)
@@ -189,6 +194,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/local/chat", s.handleChat)
 	s.mux.HandleFunc("/api/local/insights", s.handleInsights)
 	s.mux.HandleFunc("/api/machines", s.handleMachines)
+	s.mux.HandleFunc("/api/machines/remove", s.handleMachineRemove)
 
 	s.mux.HandleFunc("/api/devices", s.handleDevices)
 	s.mux.HandleFunc("/api/inbox", s.handleInbox)
@@ -259,7 +265,31 @@ func withAuthRetry[T any](s *Server, ctx context.Context, fn func(c *cloud.Clien
 
 	newSess, rerr := cloud.RefreshSession(ctx, s.cfg.SupabaseURL, s.cfg.SupabaseKey, sess.RefreshToken)
 	if rerr != nil {
-		s.clearSession()
+		/*
+		 * BUG CŨ ("Warning/Critical không cập nhật", header vẫn hiện
+		 * đã đăng nhập nhưng Machines lại đòi đăng nhập lại): trước
+		 * đây cứ hễ RefreshSession() lỗi là clearSession() NGAY LẬP
+		 * TỨC, KHÔNG PHÂN BIỆT lỗi thật (refresh token bị Supabase
+		 * từ chối hẳn - *cloud.AuthError) với lỗi mạng tạm thời
+		 * (timeout, đứt mạng vài giây, DNS lag...) - vốn KHÔNG có
+		 * nghĩa là phiên đăng nhập đã hỏng. Vì session (s.session)
+		 * là biến TOÀN CỤC dùng chung cho MỌI request, chỉ cần 1 lần
+		 * gọi API tình cờ trúng lúc mạng chập chờn là XOÁ SẠCH phiên
+		 * đăng nhập của CẢ APP - các phần khác (Machines, Family...)
+		 * đột nhiên đòi đăng nhập lại dù người dùng chẳng làm gì cả,
+		 * trong khi phần header (render lúc tải trang, trước khi bug
+		 * này xảy ra) vẫn hiện email cũ cho tới khi F5 lại.
+		 *
+		 * Giờ CHỈ xoá session khi Supabase THẬT SỰ từ chối refresh
+		 * token (trả về *cloud.AuthError, tức có phản hồi HTTP rõ
+		 * ràng nói "token này không dùng được nữa") - mọi lỗi khác
+		 * (mạng, timeout...) coi là tạm thời, GIỮ NGUYÊN session để
+		 * lần gọi API tiếp theo có cơ hội thử lại bình thường.
+		 */
+		var authErr *cloud.AuthError
+		if errors.As(rerr, &authErr) {
+			s.clearSession()
+		}
 		return zero, err
 	}
 	s.setSession(newSess)
@@ -367,6 +397,97 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------
+// Google / Microsoft OAuth login (Supabase Auth as the identity broker)
+//
+// Flow (all still just this local dashboard talking to Supabase - no
+// new third party, no change to the C agent's own separate session):
+//   1. GET /auth/oauth/start?provider=google|azure  -> 302 to Supabase's
+//      GoTrue /authorize endpoint, which redirects to Google/Microsoft.
+//   2. Provider redirects back to Supabase, which redirects to OUR
+//      redirect_to (/auth/oauth/callback) with the session tokens in
+//      the URL FRAGMENT (#access_token=...&refresh_token=...) -
+//      fragments never reach the server, only the browser sees them.
+//   3. /auth/oauth/callback is a tiny static HTML+JS page: it reads
+//      window.location.hash and POSTs the tokens to
+//      /auth/oauth/complete, which is a normal server endpoint.
+//   4. /auth/oauth/complete verifies the access_token against Supabase
+//      (GET /auth/v1/user) and stores the session exactly like email/
+//      password login does (s.setSession).
+//
+// "azure" is Supabase's provider id for Microsoft (Azure AD / Entra
+// ID) - there's no separate "microsoft" id.
+// ---------------------------------------------------------------------
+
+var oauthProviderNames = map[string]string{
+	"google": "google",
+	"azure":  "azure",
+}
+
+func (s *Server) oauthRedirectURL(r *http.Request) string {
+	// Dùng chính Host mà trình duyệt đang gọi (thường 127.0.0.1:PORT
+	// hoặc localhost:PORT) thay vì hardcode - để hoạt động đúng dù
+	// người dùng đổi cổng qua JUSTINTIME_PORT.
+	scheme := "http"
+	return fmt.Sprintf("%s://%s/auth/oauth/callback", scheme, r.Host)
+}
+
+func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
+	provider := r.URL.Query().Get("provider")
+	if _, ok := oauthProviderNames[provider]; !ok {
+		http.Error(w, "unknown provider", http.StatusBadRequest)
+		return
+	}
+
+	authorizeURL := fmt.Sprintf(
+		"%s/auth/v1/authorize?provider=%s&redirect_to=%s",
+		s.cfg.SupabaseURL,
+		url.QueryEscape(provider),
+		url.QueryEscape(s.oauthRedirectURL(r)),
+	)
+	http.Redirect(w, r, authorizeURL, http.StatusFound)
+}
+
+// handleOAuthCallback serves the tiny landing page that grabs the
+// tokens out of the URL fragment (server-side code can never see a
+// fragment - only client JS can) and hands them to /auth/oauth/complete.
+func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	data := s.basePageData("login")
+	s.render(w, "oauth_callback.html", data)
+}
+
+type oauthCompleteRequest struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ErrorDesc    string `json:"error_description"`
+}
+
+func (s *Server) handleOAuthComplete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+
+	var req oauthCompleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.ErrorDesc != "" {
+		writeErr(w, http.StatusBadRequest, req.ErrorDesc)
+		return
+	}
+
+	sess, err := cloud.SessionFromOAuthTokens(r.Context(), s.cfg.SupabaseURL, s.cfg.SupabaseKey, req.AccessToken, req.RefreshToken)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	s.setSession(sess)
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// ---------------------------------------------------------------------
 // JSON helpers
 // ---------------------------------------------------------------------
 
@@ -427,6 +548,46 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	// SECURITY: trước đây chỉ xoá session cục bộ - access/refresh
+	// token vẫn còn hiệu lực bên Supabase, chưa hề bị thu hồi. Giờ
+	// gọi /auth/v1/logout trước khi xoá local, để token thật sự bị
+	// vô hiệu hoá. Không chặn logout cục bộ nếu bước revoke lỗi
+	// (mất mạng chẳng hạn) - người dùng vẫn cần thoát được, chỉ là
+	// token cũ có thể còn sống tới khi tự hết hạn.
+	if sess := s.getSession(); sess != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		_ = cloud.Logout(ctx, s.cfg.SupabaseURL, s.cfg.SupabaseKey, sess.AccessToken, "")
+		cancel()
+	}
+	s.clearSession()
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handleAuthLogoutEverywhere revokes EVERY refresh token for this
+// user (scope=global) — every browser tab, every device, every place
+// still logged in — not just this dashboard's own session. Use after
+// suspecting a leaked token, a stolen device, or just as routine
+// hygiene from Settings > Security.
+func (s *Server) handleAuthLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+
+	sess := s.getSession()
+	if sess == nil {
+		writeErr(w, http.StatusUnauthorized, "not logged in")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if err := cloud.Logout(ctx, s.cfg.SupabaseURL, s.cfg.SupabaseKey, sess.AccessToken, "global"); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
 	s.clearSession()
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -885,14 +1046,63 @@ func (s *Server) handleMachines(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"machines": heartbeats, "logged_in": true, "self_device_id": s.cfg.DeviceID})
 }
 
+type removeMachineRequest struct {
+	DeviceID string `json:"device_id"`
+}
+
+// handleMachineRemove lets the person delete a stale device_heartbeats
+// row - most importantly, a LEGACY row created before the device-id
+// anonymization fix, whose hostname/device_id fields still hold the
+// real Windows computer name (see machines-list rendering in
+// dashboard.js, which now refuses to display anything that isn't in
+// the anonymized "PC-XXXXXXXX" format and offers this Remove action
+// instead). RLS restricts the delete to rows this account owns.
+func (s *Server) handleMachineRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req removeMachineRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DeviceID == "" {
+		writeErr(w, http.StatusBadRequest, "device_id is required")
+		return
+	}
+
+	_, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) (struct{}, error) {
+		return struct{}{}, c.DeleteHeartbeat(r.Context(), req.DeviceID)
+	})
+	if err != nil {
+		if errors.Is(err, errNotLoggedIn) {
+			writeErr(w, http.StatusUnauthorized, "not logged in")
+			return
+		}
+		s.writeCloudErr(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
 // ---------------------------------------------------------------------
 // Device-to-device messaging API — has no Python equivalent. Only
 // ever relayed through Supabase; never a direct connection.
 // ---------------------------------------------------------------------
 
 func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
-	totals, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.DailyTotal, error) {
-		return c.DailyTotals(r.Context(), "", "")
+	/*
+	 * BUG CŨ ("Machine chỉ hiển thị các máy đã kết bạn qua email" -
+	 * thực ra là: danh sách chip chọn máy để chat chỉ hiện ÍT máy
+	 * hơn hẳn so với mục "Machines"): trước đây lấy danh sách máy từ
+	 * DailyTotals (activity_daily_totals - CHỈ có mặt khi máy đó đã
+	 * ĐỒNG BỘ ít nhất 1 bản ghi hoạt động lên cloud), trong khi mục
+	 * "Machines" lấy từ device_heartbeats (có mặt ngay khi máy gửi
+	 * heartbeat đầu tiên - giờ agent C tự làm việc này, xem
+	 * machines.c). Kết quả: máy mới cài, hoặc máy ít hoạt động/chưa
+	 * tới lúc đồng bộ, xuất hiện ở "Machines" nhưng KHÔNG xuất hiện
+	 * trong danh sách chọn để chat - gây khó hiểu. Giờ dùng CHUNG 1
+	 * nguồn (device_heartbeats) cho cả 2 nơi.
+	 */
+	heartbeats, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.DeviceHeartbeat, error) {
+		return c.ListHeartbeats(r.Context())
 	})
 	if err != nil {
 		if errors.Is(err, errNotLoggedIn) {
@@ -904,9 +1114,9 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var others []string
-	for _, d := range cloud.Devices(totals) {
-		if d != s.cfg.DeviceID {
-			others = append(others, d)
+	for _, hb := range heartbeats {
+		if hb.DeviceID != s.cfg.DeviceID {
+			others = append(others, hb.DeviceID)
 		}
 	}
 	writeJSON(w, map[string]any{"devices": others, "logged_in": true})
@@ -1507,7 +1717,19 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 
 	case "ai_key":
 		ds := dashsettings.Load()
-		ds.GeminiAPIKey = strings.TrimSpace(r.FormValue("gemini_api_key"))
+		newKey := strings.TrimSpace(r.FormValue("gemini_api_key"))
+		clear := r.FormValue("clear_gemini_key") == "1"
+
+		if clear {
+			ds.GeminiAPIKey = ""
+		} else if newKey != "" {
+			// Bỏ trống ô input + bấm Save = GIỮ NGUYÊN key cũ (xem
+			// settings.html - ô input không còn hiện lại key thật
+			// nữa, nên "trống" không có nghĩa là "người dùng muốn
+			// xoá", chỉ checkbox "clear_gemini_key" mới xoá thật).
+			ds.GeminiAPIKey = newKey
+		}
+
 		_ = dashsettings.Save(ds)
 		data = s.basePageData("settings")
 		data.Extra["message"] = data.T["save_success"]

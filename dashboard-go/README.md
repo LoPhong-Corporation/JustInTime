@@ -102,3 +102,36 @@ read/write messages tied to their own account — the same protection
   C agent's login, exactly like the Python version — it's not the
   agent's DPAPI `session.dat`, it's its own persisted session at
   `dashboard_session.dat`.
+
+## Setting up Google / Microsoft login (one-time, per Supabase project)
+
+Email/password login works out of the box against the default
+Supabase project. Google and Microsoft sign-in need a bit of one-time
+setup on **your own** Supabase project first, because OAuth requires
+registering an app with Google/Microsoft and telling Supabase about
+it — there's no way around that step, it isn't something this code
+can configure for you.
+
+1. **Google**: in [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   create an OAuth 2.0 Client ID (type "Web application"). Add
+   `https://<your-project-ref>.supabase.co/auth/v1/callback` as an
+   authorized redirect URI. Copy the Client ID + Client Secret into
+   Supabase Dashboard → Authentication → Providers → Google.
+2. **Microsoft**: in [Azure Portal](https://portal.azure.com) →
+   App registrations, register an app, add the same
+   `https://<your-project-ref>.supabase.co/auth/v1/callback` as a
+   redirect URI. Copy the Application (client) ID + a client secret
+   into Supabase Dashboard → Authentication → Providers → Azure.
+   (Supabase's provider id for Microsoft is "azure" — that's what
+   `/auth/oauth/start?provider=azure` in this app uses.)
+3. In Supabase Dashboard → Authentication → URL Configuration, add
+   `http://127.0.0.1:5000/auth/oauth/callback` (or whatever port
+   `JUSTINTIME_PORT` is set to) to **Redirect URLs** — Supabase
+   refuses to redirect back anywhere not on this allow-list.
+
+Once that's done, the "Continue with Google" / "Continue with
+Microsoft" buttons on `/login` work immediately — no code changes
+needed. See `handleOAuthStart` / `handleOAuthCallback` /
+`handleOAuthComplete` in `internal/server/server.go` for how the
+redirect + token handoff works.
+

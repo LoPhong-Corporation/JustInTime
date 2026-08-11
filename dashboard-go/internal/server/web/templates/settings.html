@@ -107,13 +107,61 @@
     </div>
 
     <div class="form-card">
+        <h3>{{.T.security_title}}</h3>
+        {{if not .LoggedIn}}
+        <p style="color:#7e9ac0; font-size:13px;">{{.T.login_required}} <a href="/login">{{.T.login}}</a></p>
+        {{else}}
+        <p style="color:#7e9ac0; font-size:13px;">{{.T.security_note}}</p>
+        <button type="button" class="btn btn-outline" id="btn-logout-everywhere" style="border-color:#ef4444; color:#ef4444;">{{.T.security_logout_everywhere}}</button>
+        <p id="logout-everywhere-status" style="font-size:12px; margin-top:8px;"></p>
+        <script>
+            document.getElementById('btn-logout-everywhere')?.addEventListener('click', async () => {
+                if (!confirm({{json .T.security_logout_everywhere_confirm}})) return;
+                const statusEl = document.getElementById('logout-everywhere-status');
+                statusEl.textContent = '';
+                try {
+                    const res = await fetch('/api/auth/logout-everywhere', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.error) {
+                        statusEl.style.color = '#ef4444';
+                        statusEl.textContent = data.error;
+                    } else {
+                        window.location.href = '/login';
+                    }
+                } catch (e) {
+                    statusEl.style.color = '#ef4444';
+                    statusEl.textContent = String(e);
+                }
+            });
+        </script>
+        {{end}}
+    </div>
+
+    <div class="form-card">
         <h3>{{.T.ai_insights_title}}</h3>
         <p style="color:#7e9ac0; font-size:13px;">{{.T.ai_insights_note}}</p>
         <form method="POST" action="/settings">
             <input type="hidden" name="action" value="ai_key">
 
+            <!-- SECURITY: trước đây field này in thẳng key thật (dạng
+                 chữ) vào thuộc tính HTML value của input password -
+                 xem được nguyên văn qua "View Source"/DevTools dù ô
+                 input chỉ CHE trên màn hình, không mã hoá gì cả. Giờ
+                 để trống, chỉ báo trạng thái đã lưu hay chưa; để
+                 trống + bấm Save = giữ nguyên key cũ, không xoá nhầm. -->
+            <p style="color:{{if .DS.HasGeminiAPIKey}}#22c55e{{else}}#4a6584{{end}}; font-size:12px; margin:4px 0 10px 0;">
+                {{if .DS.HasGeminiAPIKey}}{{.T.ai_insights_key_saved}}{{else}}{{.T.ai_insights_key_none}}{{end}}
+            </p>
+
             <label>{{.T.ai_insights_key_label}}</label>
-            <input type="password" name="gemini_api_key" placeholder="AIza..." value="{{.DS.GeminiAPIKey}}" autocomplete="off">
+            <input type="password" name="gemini_api_key" placeholder="{{if .DS.HasGeminiAPIKey}}{{.T.ai_insights_key_placeholder_keep}}{{else}}AIza...{{end}}" value="" autocomplete="off">
+
+            {{if .DS.HasGeminiAPIKey}}
+            <label style="display:flex; align-items:center; gap:6px; font-weight:normal; margin-top:8px;">
+                <input type="checkbox" name="clear_gemini_key" value="1" style="width:auto;">
+                {{.T.ai_insights_key_remove}}
+            </label>
+            {{end}}
 
             <button type="submit" class="btn">{{.T.save}}</button>
         </form>

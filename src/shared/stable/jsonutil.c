@@ -1,11 +1,15 @@
 //
 // jsonutil.c
 //
+// Chế độ STABLE (C core). Xem src/shared/experimental/jsonutil.cpp cho
+// bản C++ tương đương (cùng interface jsonutil.h).
+//
 
 #include "jsonutil.h"
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 void json_escape(
     const char* input,
@@ -27,10 +31,6 @@ void json_escape(
     {
         unsigned char c = (unsigned char)input[i];
 
-        /*
-         * Chừa ít nhất 7 ký tự trống để có thể
-         * ghi an toàn chuỗi \u00XX dài nhất.
-         */
         if (j + 7 >= output_size)
             break;
 
@@ -89,8 +89,10 @@ static const char* find_value_pos(
     const char* json,
     const char* key)
 {
-    char pattern[160];
+    if (!json || !key)
+        return NULL;
 
+    char pattern[160];
     snprintf(pattern, sizeof(pattern), "\"%s\"", key);
 
     const char* pos = strstr(json, pattern);
@@ -119,7 +121,7 @@ int json_extract_string(
 {
     const char* pos = find_value_pos(json, key);
 
-    if (!pos || *pos != '"')
+    if (!pos || *pos != '"' || !out || out_size <= 0)
         return 0;
 
     pos++;
@@ -153,7 +155,7 @@ int json_extract_bool(
 {
     const char* pos = find_value_pos(json, key);
 
-    if (!pos)
+    if (!pos || !out_value)
         return 0;
 
     if (strncmp(pos, "true", 4) == 0)
@@ -179,7 +181,7 @@ int json_extract_long(
 {
     const char* pos = find_value_pos(json, key);
 
-    if (!pos)
+    if (!pos || !out_value)
         return 0;
 
     if (strncmp(pos, "null", 4) == 0)
@@ -205,15 +207,11 @@ int json_array_next(
     char* obj_out,
     size_t obj_out_size)
 {
-    if (!cursor || !*cursor)
+    if (!cursor || !*cursor || !obj_out || obj_out_size == 0)
         return 0;
 
     const char* p = *cursor;
 
-    /*
-     * Bỏ qua khoảng trắng, dấu '[' đầu mảng, và dấu ','
-     * ngăn cách giữa 2 phần tử.
-     */
     while (
         *p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' ||
         *p == '[' || *p == ','
@@ -222,18 +220,10 @@ int json_array_next(
 
     if (*p != '{')
     {
-        /*
-         * Đã hết mảng (gặp ']') hoặc chuỗi rỗng/không hợp lệ.
-         */
         *cursor = p;
         return 0;
     }
 
-    /*
-     * Đếm ngoặc lồng nhau (bỏ qua { } nằm bên trong chuỗi
-     * string, để không đếm nhầm nếu 1 giá trị string chứa
-     * ký tự '{'/'}').
-     */
     int depth = 0;
     int in_string = 0;
     const char* start = p;

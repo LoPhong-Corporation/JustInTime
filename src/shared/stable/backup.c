@@ -1,9 +1,8 @@
 //
 // backup.c
-// Backup dữ liệu cục bộ ra file JSON, tách biệt
-// hoàn toàn với việc đồng bộ lên Supabase, để đảm
-// bảo luôn có ít nhất một bản sao dữ liệu an toàn
-// ngay cả khi mất kết nối mạng dài ngày.
+//
+// Chế độ STABLE (C core). Xem src/shared/experimental/backup.cpp cho
+// bản C++ tương đương (cùng interface backup.h).
 //
 
 #include "backup.h"
@@ -18,13 +17,6 @@
 #include <string.h>
 #include <time.h>
 
-/*
- * Lấy đường dẫn tuyệt đối tới thư mục backup
- * (%APPDATA%\JustInTime\backups), tạo nếu chưa có.
- * QUAN TRỌNG: không dùng đường dẫn tương đối, vì khi
- * app tự khởi động cùng Windows (autostart), thư mục
- * làm việc hiện tại có thể khác thư mục chứa file .exe.
- */
 static void get_backup_dir(char* out, int out_size)
 {
     char config_dir[MAX_PATH];
@@ -42,13 +34,6 @@ static void get_backup_dir(char* out, int out_size)
     CreateDirectoryA(out, NULL);
 }
 
-/*
- * Xóa bớt các file backup cũ, chỉ giữ lại
- * BACKUP_KEEP_COUNT file gần nhất.
- * Vì tên file có định dạng backup_YYYYMMDD_HHMMSS.json
- * nên sắp xếp theo thứ tự chữ cái cũng chính là
- * sắp xếp theo thời gian.
- */
 static void cleanup_old_backups(const char* backup_dir)
 {
     char pattern[MAX_PATH];
@@ -93,9 +78,6 @@ static void cleanup_old_backups(const char* backup_dir)
 
     FindClose(h);
 
-    /*
-     * Sắp xếp tăng dần (insertion sort, count nhỏ nên ổn).
-     */
     for (int i = 1; i < count; i++)
     {
         char key[MAX_PATH];

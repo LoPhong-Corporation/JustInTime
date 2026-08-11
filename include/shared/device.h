@@ -1,7 +1,7 @@
 //
 // Created by LoPhongCorporation on 6/24/2026.
 // Rewritten: device_id không còn là tên máy Windows (GetComputerName)
-// nữa để tránh rò rỉ thông tin cá nhân - xem device.c để biết lý do
+// nữa để tránh rò rỉ thông tin cá nhân - xem device.cpp để biết lý do
 // và chi tiết cách sinh/lưu id mới.
 //
 

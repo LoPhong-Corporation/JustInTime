@@ -2,6 +2,8 @@
 
 #include "controlpanelwindow.h"
 
+#include <cstring>
+
 #include "loginpage.h"
 #include "settingspage.h"
 #include "remoteviewpage.h"
@@ -24,12 +26,24 @@
 #include <QCloseEvent>
 #include <QSize>
 #include <QFont>
+#include <QScrollArea>
+#include <QProcess>
+#include <QTcpSocket>
+#include <QHostAddress>
+#include <QCoreApplication>
+#include <QFile>
+#include <QTimer>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
+#include <QMessageBox>
 
 extern "C" {
 #include "auth.h"
 #include "settings.h"
 #include "database.h"
 #include "i18n.h"
+#include "machines.h"
+#include "device.h"
 }
 
 #include "config.h"
@@ -39,9 +53,72 @@ static QString tr_(const char *key)
     return QString::fromUtf8(i18n_t(key));
 }
 
+// Icon nhỏ (emoji) theo NHÓM ứng dụng, chọn bằng cách khớp từ khoá
+// đơn giản trên tên process - agent C không lưu đường dẫn đầy đủ của
+// exe (chỉ tên), nên không thể trích icon THẬT của từng app một
+// cách đáng tin cậy; icon theo nhóm vẫn cho cảm giác trực quan, dễ
+// quét mắt hơn nhiều so với 1 khối text phẳng như trước đây.
+static QString iconForProcess(const QString &processNameRaw)
+{
+    const QString p = processNameRaw.toLower();
+
+    struct Rule { const char *needle; const char *emoji; };
+    static const Rule rules[] = {
+        {"chrome",    "🌐"}, {"firefox",  "🌐"}, {"msedge",   "🌐"}, {"opera", "🌐"}, {"brave", "🌐"},
+        {"discord",   "💬"}, {"zalo",     "💬"}, {"telegram", "💬"}, {"messenger", "💬"}, {"slack", "💬"},
+        {"code",      "🧑‍💻"}, {"devenv",   "🧑‍💻"}, {"pycharm",  "🧑‍💻"}, {"clion", "🧑‍💻"}, {"idea", "🧑‍💻"},
+        {"steam",     "🎮"}, {"riot",     "🎮"}, {"valorant", "🎮"}, {"leagueclient", "🎮"}, {"epicgames", "🎮"},
+        {"word",      "📄"}, {"excel",    "📊"}, {"powerpnt", "📊"}, {"acrobat", "📄"}, {"onenote", "📝"},
+        {"spotify",   "🎵"}, {"vlc",      "🎬"}, {"potplayer","🎬"}, {"itunes", "🎵"},
+        {"explorer",  "🗂️"}, {"cmd",      "⌨️"}, {"powershell","⌨️"}, {"terminal", "⌨️"},
+        {"photoshop", "🎨"}, {"figma",    "🎨"}, {"illustrator","🎨"},
+    };
+
+    for (const auto &rule : rules)
+        if (p.contains(QString::fromLatin1(rule.needle)))
+            return QString::fromUtf8(rule.emoji);
+
+    return QStringLiteral("🖥️"); // mặc định: app không nhận diện được nhóm
+}
+
+// Xoá phần mở rộng ".exe" cho gọn khi hiển thị (agent lưu nguyên tên
+// file, dashboard Go cũng hiển thị y hệt vậy nên KHÔNG đổi dữ liệu
+// gốc, chỉ bỏ đuôi lúc render).
+static QString prettyProcessName(const QString &raw)
+{
+    QString s = raw;
+    if (s.endsWith(".exe", Qt::CaseInsensitive))
+        s.chop(4);
+    return s;
+}
+
+static QString formatHMS(long long totalSeconds)
+{
+    long long h = totalSeconds / 3600;
+    long long m = (totalSeconds % 3600) / 60;
+    long long s = totalSeconds % 60;
+    return QString("%1:%2:%3")
+        .arg(h, 2, 10, QChar('0'))
+        .arg(m, 2, 10, QChar('0'))
+        .arg(s, 2, 10, QChar('0'));
+}
+
 ControlPanelWindow::ControlPanelWindow(QWidget *parent) : QMainWindow(parent)
 {
+    /*
+     * Chỉ gắn thẻ vào tiêu đề cửa sổ khi đang chạy bản EXPERIMENTAL -
+     * đây là dấu hiệu CẢNH BÁO cho người dùng/dev biết ngay họ đang
+     * chạy bản thử nghiệm, không cần mở tới trang Development mới
+     * biết. Bản STABLE (mặc định) không cần thẻ gì thêm.
+     */
+#ifdef JUSTINTIME_CORE_MODE
+    if (QString(JUSTINTIME_CORE_MODE) == "EXPERIMENTAL")
+        setWindowTitle(tr_("cp.title") + " [EXPERIMENTAL]");
+    else
+        setWindowTitle(tr_("cp.title"));
+#else
     setWindowTitle(tr_("cp.title"));
+#endif
     resize(940, 640);
     setMinimumSize(800, 560);
 
@@ -153,6 +230,16 @@ ControlPanelWindow::ControlPanelWindow(QWidget *parent) : QMainWindow(parent)
     m_sidebar->addItem(new QListWidgetItem(style()->standardIcon(QStyle::SP_MessageBoxQuestion), tr_("cp.nav_about")));
     m_rowAbout = m_sidebar->count() - 1;
 
+    /*
+     * Mục "Development" tách RIÊNG khỏi About - đây là nơi chuyên
+     * cho thông tin build/kỹ thuật (chế độ core Stable/Experimental
+     * đang chạy...), không lẫn vào thông tin giới thiệu app chung
+     * chung ở About.
+     */
+    buildDevelopmentPage();
+    m_sidebar->addItem(new QListWidgetItem(style()->standardIcon(QStyle::SP_DialogHelpButton), tr_("cp.nav_development")));
+    m_rowDevelopment = m_sidebar->count() - 1;
+
     connect(m_sidebar, &QListWidget::currentRowChanged, this, &ControlPanelWindow::onSidebarRowChanged);
 
     applyStylesheet();
@@ -192,7 +279,16 @@ void ControlPanelWindow::buildOverviewPage()
     statusBoxLayout->addWidget(m_overviewStatus);
     statusBoxLayout->addWidget(m_overviewPauseBtn, 0, Qt::AlignLeft);
 
-    // ---- Hôm nay ----
+    /*
+     * SẮP XẾP LẠI (theo yêu cầu, giống thứ tự bên dashboard Go):
+     * bước 1 - thời gian dùng máy hôm nay TRƯỚC TIÊN (kèm icon từng
+     * app, xem iconForProcess); bước 2 - danh sách Machines; bước 3
+     * - mọi thứ còn lại (lối tắt, giới thiệu) xuống dưới cùng -
+     * trước đây thứ tự ngược lại (giới thiệu/lối tắt lên trước
+     * "Today").
+     */
+
+    // ---- 1. Hôm nay (kèm icon từng app) ----
 
     auto *todayBox = new QFrame(m_overviewPage);
     todayBox->setObjectName("card");
@@ -201,13 +297,37 @@ void ControlPanelWindow::buildOverviewPage()
     auto *todayTitle = new QLabel(tr_("cp.overview_today_title"), todayBox);
     todayTitle->setStyleSheet("font-weight: 600;");
 
-    m_overviewToday = new QLabel(todayBox);
-    m_overviewToday->setWordWrap(true);
+    m_overviewTodayList = new QVBoxLayout();
+    m_overviewTodayList->setSpacing(8);
+
+    m_overviewTodayEmpty = new QLabel(todayBox);
+    m_overviewTodayEmpty->setStyleSheet("color: #4a6584;");
 
     todayBoxLayout->addWidget(todayTitle);
-    todayBoxLayout->addWidget(m_overviewToday);
+    todayBoxLayout->addLayout(m_overviewTodayList);
+    todayBoxLayout->addWidget(m_overviewTodayEmpty);
 
-    // ---- Lối tắt nhanh ----
+    // ---- 2. Machines ----
+
+    auto *machinesBox = new QFrame(m_overviewPage);
+    machinesBox->setObjectName("card");
+    auto *machinesBoxLayout = new QVBoxLayout(machinesBox);
+
+    auto *machinesTitle = new QLabel(tr_("cp.overview_machines_title"), machinesBox);
+    machinesTitle->setStyleSheet("font-weight: 600;");
+
+    m_overviewMachinesList = new QVBoxLayout();
+    m_overviewMachinesList->setSpacing(8);
+
+    m_overviewMachinesEmpty = new QLabel(machinesBox);
+    m_overviewMachinesEmpty->setWordWrap(true);
+    m_overviewMachinesEmpty->setStyleSheet("color: #4a6584;");
+
+    machinesBoxLayout->addWidget(machinesTitle);
+    machinesBoxLayout->addLayout(m_overviewMachinesList);
+    machinesBoxLayout->addWidget(m_overviewMachinesEmpty);
+
+    // ---- 3a. Lối tắt nhanh ----
 
     auto *quickBox = new QFrame(m_overviewPage);
     quickBox->setObjectName("card");
@@ -217,14 +337,12 @@ void ControlPanelWindow::buildOverviewPage()
     quickTitle->setStyleSheet("font-weight: 600;");
 
     auto *openDashboardBtn = new QPushButton(tr_("cp.overview_open_dashboard"), quickBox);
-    connect(openDashboardBtn, &QPushButton::clicked, this, []() {
-        QDesktopServices::openUrl(QUrl("http://127.0.0.1:5000/"));
-    });
+    connect(openDashboardBtn, &QPushButton::clicked, this, &ControlPanelWindow::openWebDashboard);
 
     quickBoxLayout->addWidget(quickTitle);
     quickBoxLayout->addWidget(openDashboardBtn, 0, Qt::AlignLeft);
 
-    // ---- Giới thiệu ngắn (giúp người mới làm quen) ----
+    // ---- 3b. Giới thiệu ngắn (giúp người mới làm quen) ----
 
     auto *introBox = new QFrame(m_overviewPage);
     introBox->setObjectName("card");
@@ -240,16 +358,103 @@ void ControlPanelWindow::buildOverviewPage()
     introBoxLayout->addWidget(introTitle);
     introBoxLayout->addWidget(introBody);
 
-    auto *layout = new QVBoxLayout(m_overviewPage);
-    layout->addWidget(m_overviewGreeting);
-    layout->addWidget(m_overviewSubtitle);
-    layout->addWidget(m_overviewLoginBtn, 0, Qt::AlignLeft);
-    layout->addSpacing(12);
-    layout->addWidget(statusBox);
-    layout->addWidget(todayBox);
-    layout->addWidget(quickBox);
-    layout->addWidget(introBox);
-    layout->addStretch();
+    auto *contentLayout = new QVBoxLayout();
+    contentLayout->addWidget(m_overviewGreeting);
+    contentLayout->addWidget(m_overviewSubtitle);
+    contentLayout->addWidget(m_overviewLoginBtn, 0, Qt::AlignLeft);
+    contentLayout->addSpacing(12);
+    contentLayout->addWidget(statusBox);
+    contentLayout->addWidget(todayBox);
+    contentLayout->addWidget(machinesBox);
+    contentLayout->addWidget(quickBox);
+    contentLayout->addWidget(introBox);
+    contentLayout->addStretch();
+
+    // BỌC QScrollArea (FIX: trước đây Overview KHÔNG cuộn được - nếu
+    // "Today so far" có nhiều dòng và cửa sổ không đủ cao, phần nội
+    // dung phía dưới bị cắt mất/đè lên nhau, không có cách nào xem
+    // hết - đúng như bạn phản ánh "không hiển thị hết nội dung").
+    auto *content = new QWidget;
+    content->setLayout(contentLayout);
+
+    auto *scroll = new QScrollArea(m_overviewPage);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidget(content);
+
+    auto *outer = new QVBoxLayout(m_overviewPage);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->addWidget(scroll);
+}
+
+void ControlPanelWindow::openWebDashboard()
+{
+    /*
+     * FIX ("mở dashboard trên Qt không hoạt động, phải mở server
+     * trước"): trước đây bấm nút này chỉ gọi thẳng
+     * QDesktopServices::openUrl() - nếu dashboard-go (dashboard.exe)
+     * chưa chạy sẵn, trình duyệt mở ra 1 trang lỗi "không kết nối
+     * được" vì chẳng có gì đang lắng nghe cổng 5000 cả. Giờ: thử kết
+     * nối cổng trước; nếu chưa có gì lắng nghe, tự khởi động
+     * dashboard.exe (cùng thư mục cài đặt với tray agent) rồi đợi 1
+     * chút cho server sẵn sàng trước khi mở trình duyệt.
+     */
+    const quint16 port = 5000;
+
+    auto openBrowser = [port]() {
+        QDesktopServices::openUrl(QUrl(QString("http://127.0.0.1:%1/").arg(port)));
+    };
+
+    QTcpSocket probe;
+    probe.connectToHost(QHostAddress::LocalHost, port);
+
+    if (probe.waitForConnected(150))
+    {
+        probe.disconnectFromHost();
+        openBrowser();
+        return;
+    }
+
+    QString exePath = QCoreApplication::applicationDirPath() + "/dashboard.exe";
+
+    if (!QFile::exists(exePath))
+    {
+        QMessageBox::warning(
+            this, "JustInTime",
+            tr_("cp.overview_dashboard_missing").arg(exePath)
+        );
+        return;
+    }
+
+    QProcess::startDetached(exePath, {}, QCoreApplication::applicationDirPath());
+
+    // Đợi server khởi động xong (thường <1s) rồi mới mở trình duyệt -
+    // thử vài lần thay vì chờ cứng 1 khoảng thời gian cố định, để
+    // không mở trình duyệt quá sớm (lỗi) hay quá muộn (chờ vô ích).
+    QTimer *retryTimer = new QTimer(this);
+    auto *attempts = new int(0);
+
+    connect(retryTimer, &QTimer::timeout, this, [=]() mutable {
+        QTcpSocket *retryProbe = new QTcpSocket(this);
+        retryProbe->connectToHost(QHostAddress::LocalHost, port);
+
+        if (retryProbe->waitForConnected(150))
+        {
+            retryProbe->disconnectFromHost();
+            retryTimer->stop();
+            retryTimer->deleteLater();
+            openBrowser();
+        }
+        else if (++(*attempts) >= 20) // ~5s tổng cộng
+        {
+            retryTimer->stop();
+            retryTimer->deleteLater();
+            openBrowser(); // vẫn mở - có thể server chỉ chậm hơn dự kiến
+        }
+
+        retryProbe->deleteLater();
+    });
+    retryTimer->start(250);
 }
 
 void ControlPanelWindow::buildAboutPage()
@@ -290,6 +495,88 @@ void ControlPanelWindow::buildAboutPage()
     m_stack->addWidget(page);
 }
 
+void ControlPanelWindow::buildDevelopmentPage()
+{
+    auto *page = new QWidget;
+
+    auto *heading = new QLabel(tr_("cp.nav_development"), page);
+    heading->setStyleSheet("font-size: 16px; font-weight: 600;");
+
+    auto *subtitle = new QLabel(tr_("dev.subtitle"), page);
+    subtitle->setWordWrap(true);
+    subtitle->setStyleSheet("color: #7e9ac0; font-size: 12px;");
+
+    /*
+     * Đọc trực tiếp JUSTINTIME_CORE_MODE - macro do CMakeLists.txt
+     * định nghĩa lúc build (target_compile_definitions), phản ánh
+     * ĐÚNG file .exe đang chạy, không đổi được lúc runtime.
+     */
+#ifdef JUSTINTIME_CORE_MODE
+    const QString coreMode = JUSTINTIME_CORE_MODE;
+#else
+    const QString coreMode = "STABLE";
+#endif
+    const bool isExperimental = (coreMode == "EXPERIMENTAL");
+
+    auto *coreBox = new QFrame(page);
+    coreBox->setObjectName("card");
+    auto *coreBoxLayout = new QVBoxLayout(coreBox);
+
+    auto *coreBoxTitle = new QLabel(tr_("dev.core_mode_title"), coreBox);
+    coreBoxTitle->setStyleSheet("font-weight: 600;");
+
+    auto *coreBadge = new QLabel(
+        isExperimental ? tr_("dev.badge_experimental") : tr_("dev.badge_stable"),
+        coreBox
+    );
+    coreBadge->setStyleSheet(
+        isExperimental
+            ? "color: #f5a524; font-size: 12px; font-weight: 700; "
+              "background: rgba(245,165,36,0.15); border: 1px solid rgba(245,165,36,0.4); "
+              "border-radius: 6px; padding: 3px 10px;"
+            : "color: #22c55e; font-size: 12px; font-weight: 700; "
+              "background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); "
+              "border-radius: 6px; padding: 3px 10px;"
+    );
+    coreBadge->setFixedWidth(coreBadge->sizeHint().width() + 4);
+
+    auto *coreDesc = new QLabel(
+        isExperimental ? tr_("dev.core_desc_experimental") : tr_("dev.core_desc_stable"),
+        coreBox
+    );
+    coreDesc->setWordWrap(true);
+    coreDesc->setStyleSheet("color: #b9c8de; font-size: 12px;");
+
+    coreBoxLayout->addWidget(coreBoxTitle);
+    coreBoxLayout->addWidget(coreBadge, 0, Qt::AlignLeft);
+    coreBoxLayout->addWidget(coreDesc);
+
+    auto *switchNote = new QFrame(page);
+    switchNote->setObjectName("card");
+    auto *switchNoteLayout = new QVBoxLayout(switchNote);
+
+    auto *switchTitle = new QLabel(tr_("dev.switch_title"), switchNote);
+    switchTitle->setStyleSheet("font-weight: 600;");
+
+    auto *switchBody = new QLabel(tr_("dev.switch_body"), switchNote);
+    switchBody->setWordWrap(true);
+    switchBody->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    switchBody->setStyleSheet("color: #b9c8de; font-size: 12px; font-family: Consolas, monospace;");
+
+    switchNoteLayout->addWidget(switchTitle);
+    switchNoteLayout->addWidget(switchBody);
+
+    auto *layout = new QVBoxLayout(page);
+    layout->addWidget(heading);
+    layout->addWidget(subtitle);
+    layout->addSpacing(8);
+    layout->addWidget(coreBox);
+    layout->addWidget(switchNote);
+    layout->addStretch();
+
+    m_stack->addWidget(page);
+}
+
 void ControlPanelWindow::setPaused(bool paused)
 {
     m_paused = paused;
@@ -300,6 +587,22 @@ void ControlPanelWindow::setPaused(bool paused)
     m_overviewPauseBtn->setText(
         paused ? tr_("cp.overview_resume_btn") : tr_("cp.overview_pause_btn")
     );
+}
+
+// Xoá hết widget con hiện có trong 1 QVBoxLayout trước khi vẽ lại
+// (dùng cho cả danh sách "Today" và "Machines" - cả 2 đều tạo lại
+// toàn bộ danh sách mỗi lần refresh, đơn giản hơn nhiều so với diff
+// từng dòng, và tần suất refresh không cao (mỗi lần mở trang) nên
+// không đáng lo về hiệu năng).
+static void clearLayout(QVBoxLayout *layout)
+{
+    QLayoutItem *item;
+    while ((item = layout->takeAt(0)) != nullptr)
+    {
+        if (item->widget())
+            item->widget()->deleteLater();
+        delete item;
+    }
 }
 
 void ControlPanelWindow::refreshOverview()
@@ -325,11 +628,86 @@ void ControlPanelWindow::refreshOverview()
 
     setPaused(m_paused);
 
-    wchar_t buffer[4096] = {0};
-    if (db_build_daily_summary_text(buffer, 4096))
-        m_overviewToday->setText(QString::fromWCharArray(buffer));
-    else
-        m_overviewToday->setText(tr_("cp.overview_no_data"));
+    // ---- 1. Hôm nay: danh sách có icon (thay vì 1 khối text) ----
+
+    clearLayout(m_overviewTodayList);
+
+    DailyAppSummaryEntry entries[DAILY_APP_SUMMARY_MAX];
+    int entryCount = db_get_today_app_summary(entries, DAILY_APP_SUMMARY_MAX);
+
+    m_overviewTodayEmpty->setVisible(entryCount == 0);
+    m_overviewTodayEmpty->setText(tr_("cp.overview_no_data"));
+
+    for (int i = 0; i < entryCount; i++)
+    {
+        auto *row = new QWidget(m_overviewPage);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(10);
+
+        QString processName = QString::fromWCharArray(entries[i].process_name);
+
+        auto *iconLabel = new QLabel(iconForProcess(processName), row);
+        iconLabel->setStyleSheet("font-size: 16px;");
+        iconLabel->setFixedWidth(24);
+
+        auto *nameLabel = new QLabel(prettyProcessName(processName), row);
+        nameLabel->setStyleSheet("color: #eef4fb;");
+
+        auto *durationLabel = new QLabel(formatHMS(entries[i].total_seconds), row);
+        durationLabel->setStyleSheet("color: #7e9ac0; font-family: Consolas, monospace;");
+
+        rowLayout->addWidget(iconLabel);
+        rowLayout->addWidget(nameLabel, 1);
+        rowLayout->addWidget(durationLabel);
+
+        m_overviewTodayList->addWidget(row);
+    }
+
+    // ---- 2. Machines (giống mục "Machines" bên dashboard Go) ----
+
+    clearLayout(m_overviewMachinesList);
+
+    MachineHeartbeat machines[MACHINES_MAX];
+    int machineCount = session.logged_in ? machines_list(machines, MACHINES_MAX) : 0;
+
+    char selfDeviceId[64] = {0};
+    get_device_id(selfDeviceId, sizeof(selfDeviceId));
+
+    if (!session.logged_in)
+        m_overviewMachinesEmpty->setText(tr_("cp.overview_machines_login_required"));
+    else if (machineCount == 0)
+        m_overviewMachinesEmpty->setText(tr_("cp.overview_machines_none"));
+
+    m_overviewMachinesEmpty->setVisible(machineCount == 0);
+
+    for (int i = 0; i < machineCount; i++)
+    {
+        auto *row = new QWidget(m_overviewPage);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(10);
+
+        bool isSelf = strcmp(machines[i].device_id, selfDeviceId) == 0;
+
+        auto *dot = new QLabel("●", row);
+        dot->setStyleSheet(isSelf ? "color: #22c55e;" : "color: #4a6584;");
+        dot->setFixedWidth(14);
+
+        QString label = QString::fromUtf8(machines[i].hostname);
+        if (label.isEmpty())
+            label = QString::fromUtf8(machines[i].device_id);
+        if (isSelf)
+            label += " " + tr_("cp.overview_machines_this_device");
+
+        auto *nameLabel = new QLabel(label, row);
+        nameLabel->setStyleSheet("color: #eef4fb;");
+
+        rowLayout->addWidget(dot);
+        rowLayout->addWidget(nameLabel, 1);
+
+        m_overviewMachinesList->addWidget(row);
+    }
 }
 
 void ControlPanelWindow::onLoggedInOrOut()
@@ -379,6 +757,7 @@ int ControlPanelWindow::pageToRow(Page page) const
         case PageFamily:     return m_rowFamily;
         case PageAdvanced:   return m_rowAdvanced;
         case PageAbout:      return m_rowAbout;
+        case PageDevelopment: return m_rowDevelopment;
     }
     return m_rowOverview;
 }
@@ -417,6 +796,31 @@ void ControlPanelWindow::onSidebarRowChanged(int row)
     // Chỉ mục hàng trong sidebar khớp 1-1 với chỉ mục widget trong
     // stack theo đúng thứ tự đã addWidget()/addItem() ở constructor.
     m_stack->setCurrentIndex(row);
+
+    // Hiệu ứng chuyển trang (FIX "không có animation"): fade-in nhẹ
+    // cho trang vừa hiện ra - dùng QGraphicsOpacityEffect (rẻ, không
+    // cần vẽ lại phức tạp) + QPropertyAnimation. Hiệu ứng cũ (widget
+    // effect) của trang trước tự bị Qt dọn khi widget đó bị thay
+    // effect mới hoặc xoá, không cần tự quản lý vòng đời.
+    QWidget *page = m_stack->currentWidget();
+    if (page)
+    {
+        auto *effect = new QGraphicsOpacityEffect(page);
+        page->setGraphicsEffect(effect);
+
+        auto *anim = new QPropertyAnimation(effect, "opacity", page);
+        anim->setDuration(180);
+        anim->setStartValue(0.0);
+        anim->setEndValue(1.0);
+        anim->setEasingCurve(QEasingCurve::OutCubic);
+        connect(anim, &QPropertyAnimation::finished, effect, [page]() {
+            // Bỏ effect sau khi chạy xong - để hiệu ứng opacity
+            // không "ăn" hiệu năng vẽ lại của trang mọi lúc, chỉ lúc
+            // chuyển trang mới cần.
+            page->setGraphicsEffect(nullptr);
+        });
+        anim->start(QAbstractAnimation::DeleteWhenStopped);
+    }
 
     if (row == m_rowOverview)
         refreshOverview();

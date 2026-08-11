@@ -1,6 +1,9 @@
 //
 // Created by LoPhongCorporation on 6/24/2026.
 //
+// Chế độ STABLE (C core). Xem src/shared/experimental/database.cpp
+// cho bản C++ tương đương (cùng interface database.h).
+//
 #include "database.h"
 #include "device.h"
 #include "jsonutil.h"
@@ -464,6 +467,74 @@ int db_build_daily_summary_text(
     }
 
     return has_row;
+}
+
+int db_get_today_app_summary(
+    DailyAppSummaryEntry* out,
+    int max_entries)
+{
+    if (!g_db || !out || max_entries <= 0)
+        return 0;
+
+    if (max_entries > DAILY_APP_SUMMARY_MAX)
+        max_entries = DAILY_APP_SUMMARY_MAX;
+
+    time_t now = time(NULL);
+    struct tm today;
+
+    localtime_s(&today, &now);
+
+    today.tm_hour = 0;
+    today.tm_min  = 0;
+    today.tm_sec  = 0;
+
+    time_t day_start = mktime(&today);
+
+    /* Cùng logic gộp/sắp xếp với db_build_daily_summary_text(), chỉ
+     * bỏ subquery window_title (không cần cho danh sách icon trên
+     * Overview). */
+    const char* sql =
+        "SELECT process_name, SUM(duration_seconds) as total "
+        "FROM activity_logs "
+        "WHERE start_time >= ? "
+        "GROUP BY process_name "
+        "ORDER BY total DESC "
+        "LIMIT ?;";
+
+    sqlite3_stmt* stmt = NULL;
+
+    if (
+        sqlite3_prepare_v2(
+            g_db,
+            sql,
+            -1,
+            &stmt,
+            NULL
+        ) != SQLITE_OK
+    )
+        return 0;
+
+    sqlite3_bind_int64(stmt, 1, (sqlite3_int64)day_start);
+    sqlite3_bind_int(stmt, 2, max_entries);
+
+    int count = 0;
+
+    while (count < max_entries && sqlite3_step(stmt) == SQLITE_ROW)
+    {
+        const char* process_utf8 = (const char*)sqlite3_column_text(stmt, 0);
+        long long total_seconds = sqlite3_column_int64(stmt, 1);
+
+        utf8_to_wide(
+            process_utf8,
+            out[count].process_name,
+            512
+        );
+        out[count].total_seconds = total_seconds;
+        count++;
+    }
+
+    sqlite3_finalize(stmt);
+    return count;
 }
 
 long db_get_today_seconds(

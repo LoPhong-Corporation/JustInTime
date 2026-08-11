@@ -2,7 +2,7 @@
 // restclient.h
 // Client HTTP tổng quát để gọi Supabase REST (PostgREST) hoặc
 // RPC bằng access_token của session đang đăng nhập. Được tách
-// ra dùng chung cho parentlink.c và applimits.c, thay vì mỗi
+// ra dùng chung cho parentlink.cpp và applimits.cpp, thay vì mỗi
 // module tự viết lại WinHTTP request (network.c vẫn giữ code
 // riêng vì nó gọi Edge Function - không phải PostgREST/RPC
 // trực tiếp - và không cần refactor gộp chung ở đây).

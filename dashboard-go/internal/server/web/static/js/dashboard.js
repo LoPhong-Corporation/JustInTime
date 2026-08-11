@@ -355,6 +355,68 @@ function timeAgo(iso) {
     return `${Math.round(sec / 3600)}h ago`;
 }
 
+// isAnonymizedDeviceId: true only for the new-format id/label this app
+// itself generates ("PC-XXXXXXXX", see device.c / config.go). Anything
+// else (a raw Windows computer name from before the anonymization fix,
+// or literally anything unexpected) must NEVER be shown as-is - see
+// machineDisplayName()/machineSubtitle() below.
+function isAnonymizedDeviceId(v) {
+    return /^PC-[0-9A-Fa-f]{8}$/.test(v || '');
+}
+
+function machineDisplayName(m) {
+    if (isAnonymizedDeviceId(m.hostname)) return m.hostname;
+    if (isAnonymizedDeviceId(m.device_id)) return LABELS.machineGenericName.replace('{id}', m.device_id.slice(-4));
+    // Dòng LEGACY (đăng ký trước bản vá ẩn danh) - hostname/device_id
+    // thật của nó vẫn là tên máy Windows gốc. KHÔNG BAO GIỜ hiện
+    // nguyên văn - hiện nhãn chung + gợi ý xoá (xem machine-card bên
+    // dưới, nút "Remove").
+    return LABELS.machineLegacyName;
+}
+
+function machineIsLegacy(m) {
+    return !isAnonymizedDeviceId(m.hostname) && !isAnonymizedDeviceId(m.device_id);
+}
+
+// Escape cho việc nhúng vào chuỗi JS trong thuộc tính onclick="" - các
+// máy "legacy" giữ nguyên device_id gốc (tên máy Windows thật, có thể
+// chứa dấu nháy đơn/backslash), nếu không escape thì HTML/JS bị vỡ
+// cú pháp ngay tại đó, khiến nút Remove trông như "không làm gì" (im
+// lặng lỗi parse) - góp phần vào bug "Remove không hoạt động".
+function escForOnclick(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function removeMachine(deviceId) {
+    if (!confirm(LABELS.machineRemoveConfirm)) return;
+
+    const errorDiv = document.getElementById('machines-error');
+
+    try {
+        const res = await fetch('/api/machines/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: deviceId }),
+        });
+        const data = await res.json();
+
+        // BUG CŨ ("Remove không hoạt động"): trước đây không đọc
+        // response gì cả - nếu server trả lỗi (vd phiên đăng nhập bị
+        // reset do bug withAuthRetry đã sửa ở server.go, hoặc bất kỳ
+        // lỗi nào khác), nút Remove trông như không làm gì, không ai
+        // biết vì sao. Giờ hiện lỗi thật nếu có, và chỉ gọi lại
+        // loadMachines() khi chắc chắn đã xoá thành công.
+        if (!res.ok || data.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${data.error || ('HTTP ' + res.status)}</div>`;
+            return;
+        }
+
+        loadMachines();
+    } catch (e) {
+        errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
+    }
+}
+
 async function loadMachines() {
     const errorDiv = document.getElementById('machines-error');
     const listEl = document.getElementById('machines-list');
@@ -386,12 +448,16 @@ async function loadMachines() {
                 const status = machineStatus(m);
                 counts[status]++;
                 const isSelf = m.device_id === data.self_device_id;
+                const legacy = machineIsLegacy(m);
 
                 return `
                     <div class="machine-card">
                         <div>
-                            <div class="machine-name">${m.hostname || m.device_id}${isSelf ? ' (this device)' : ''}</div>
-                            <div class="machine-sub">${m.device_id} — ${timeAgo(m.last_seen)}</div>
+                            <div class="machine-name">${machineDisplayName(m)}${isSelf ? ' (this device)' : ''}${legacy ? ` <span class="legacy-badge" title="${LABELS.machineLegacyTooltip}">${LABELS.machineLegacyBadge}</span>` : ''}</div>
+                            <div class="machine-sub">
+                                ${isAnonymizedDeviceId(m.device_id) ? m.device_id : LABELS.machineHiddenId} — ${timeAgo(m.last_seen)}
+                                ${legacy ? `<button type="button" class="machine-remove-btn" onclick="removeMachine('${escForOnclick(m.device_id)}')">${LABELS.machineRemoveBtn}</button>` : ''}
+                            </div>
                         </div>
                         <div><span class="status-pill ${status}"><span class="dot"></span>${status}</span></div>
                         <div>

@@ -1,6 +1,9 @@
 //
 // auth.c
 //
+// Chế độ STABLE (C core). Xem src/shared/experimental/auth.cpp cho
+// bản C++ tương đương (cùng interface auth.h).
+//
 
 #include "auth.h"
 #include "settings.h"
@@ -32,8 +35,8 @@ static void ensure_lock(void)
 }
 
 /*
- * json_extract_string() giờ nằm ở jsonutil.h/jsonutil.c (dùng
- * chung với parentlink.c, applimits.c) - đã include jsonutil.h
+ * json_extract_string() giờ nằm ở jsonutil.h/jsonutil.cpp (dùng
+ * chung với parentlink.cpp, applimits.cpp) - đã include jsonutil.h
  * ở trên nên không cần định nghĩa riêng ở đây nữa.
  */
 

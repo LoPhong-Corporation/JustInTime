@@ -1,23 +1,12 @@
 //
 // device.c
 //
-// TRƯỚC ĐÂY: device_id = GetComputerNameA() thẳng, tức là tên máy
-// Windows thật của người dùng (ví dụ "PHONG-LAPTOP", hay tệ hơn là
-// tên đầy đủ nếu ai đó đặt tên máy kiểu "NGUYEN-VAN-A-PC"). Giá trị
-// này được ghi vào MỌI activity_logs, đồng bộ lên Supabase, và hiển
-// thị thẳng trên dashboard (kể cả cho tài khoản phụ huynh xem máy
-// con) - rò rỉ thông tin cá nhân không cần thiết.
+// Chế độ STABLE (C core). Xem src/shared/experimental/device.cpp cho
+// bản C++ tương đương (cùng interface device.h).
 //
-// BÂY GIỜ: device_id là 1 chuỗi ngẫu nhiên dạng "PC-XXXXXXXX" (8 ký
-// tự hex), không liên quan gì tới tên máy Windows thật. Sinh 1 LẦN
-// DUY NHẤT ở lần chạy đầu tiên, lưu vào
-//   %APPDATA%\JustInTime\device.id
-// rồi dùng lại y nguyên ở các lần sau (để đồng bộ/nhắn tin liên máy
-// vẫn hoạt động đúng - dashboard-go đọc lại đúng file này). Người
-// dùng có thể tự đặt thêm 1 "nhãn hiển thị" (device_get_label /
-// device_set_label) để dễ nhận ra máy nào là máy nào trên dashboard,
-// nhưng đây là lựa chọn CHỦ ĐỘNG của người dùng - không bao giờ tự
-// động lấy tên máy Windows làm giá trị mặc định.
+// device_id là 1 chuỗi ngẫu nhiên dạng "PC-XXXXXXXX" (8 ký tự hex),
+// không liên quan gì tới tên máy Windows thật - xem device.h để biết
+// đầy đủ lý do (tránh rò rỉ thông tin cá nhân).
 //
 
 #include "device.h"
@@ -58,10 +47,6 @@ static int get_device_file_path(char* out, int out_size)
     return 1;
 }
 
-/*
- * Sinh 4 byte ngẫu nhiên bằng CSPRNG của Windows (không dùng rand()
- * - không đủ ngẫu nhiên cho việc này) rồi in ra dạng hex 8 ký tự.
- */
 static void generate_random_id(char* out, int out_size)
 {
     BYTE rnd[4] = {0};
@@ -78,9 +63,6 @@ static void generate_random_id(char* out, int out_size)
     }
     else
     {
-        /* Cực hiếm khi xảy ra, nhưng vẫn phải trả về 1 giá trị nào
-         * đó thay vì để buffer rỗng - fallback dùng thời gian +
-         * GetCurrentProcessId() làm nguồn ngẫu nhiên yếu hơn. */
         DWORD t = GetTickCount();
         DWORD pid = GetCurrentProcessId();
         rnd[0] = (BYTE)(t & 0xFF);
@@ -96,11 +78,6 @@ static void generate_random_id(char* out, int out_size)
     );
 }
 
-/*
- * Đọc file device.id (2 dòng: id, rồi label - label có thể vắng
- * mặt/rỗng). Nếu file không tồn tại hoặc dòng đầu không đúng định
- * dạng "PC-XXXXXXXX", coi như chưa có gì, sinh mới và ghi lại.
- */
 static void load_or_create(void)
 {
     if (g_cache_loaded)
@@ -191,12 +168,6 @@ void device_get_label(
     }
     else
     {
-        /*
-         * KHÔNG dùng tên máy Windows làm mặc định - chỉ dùng 1
-         * nhãn chung chung kèm 4 ký tự cuối của device_id, đủ để
-         * phân biệt nhiều máy trên cùng 1 tài khoản mà không tiết
-         * lộ gì về người dùng.
-         */
         const char* suffix = g_cached_id;
         int len = (int)strlen(g_cached_id);
 

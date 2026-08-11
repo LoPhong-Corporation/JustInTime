@@ -1,6 +1,9 @@
 //
 // settings.c
 //
+// Chế độ STABLE (C core). Xem src/shared/experimental/settings.cpp
+// cho bản C++ tương đương (cùng interface settings.h).
+//
 
 #include "settings.h"
 #include "config.h"

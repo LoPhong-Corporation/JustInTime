@@ -1,5 +1,10 @@
 //
-// applimits.c
+// applimits.cpp
+//
+// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface extern "C" trong
+// applimits.h). Logic giữ nguyên 100% - chỉ đổi cách dựng
+// path/body sang std::string thay vì swprintf/snprintf vào buffer
+// cấp phát tay ở từng hàm.
 //
 
 #include "applimits.h"
@@ -9,10 +14,32 @@
 
 #include <windows.h>
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
+#include <string>
 
-static int parse_limits_response(
+namespace {
+
+std::wstring utf8ToWide(const char* s)
+{
+    if (!s || !*s)
+        return L"";
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
+    std::wstring result(wlen > 0 ? wlen - 1 : 0, L'\0');
+    if (wlen > 0)
+        MultiByteToWideChar(CP_UTF8, 0, s, -1, result.data(), wlen);
+    return result;
+}
+
+std::string jsonEscape(const std::string& s)
+{
+    std::string out(s.size() * 6 + 16, '\0');
+    json_escape(s.c_str(), out.data(), out.size());
+    out.resize(strlen(out.c_str()));
+    return out;
+}
+
+int parseLimitsResponse(
     const char* response,
     AppLimit* out, int max_out)
 {
@@ -35,7 +62,7 @@ static int parse_limits_response(
         int is_null = 0;
 
         if (json_extract_long(obj, "daily_limit_sec", &daily_val, &is_null) && !is_null)
-            limit->daily_limit_sec = (int)daily_val;
+            limit->daily_limit_sec = static_cast<int>(daily_val);
         else
             limit->daily_limit_sec = -1;
 
@@ -49,6 +76,8 @@ static int parse_limits_response(
     return count;
 }
 
+} // namespace
+
 int applimits_list_for_child(
     const char* child_user_id,
     AppLimit* out, int max_out)
@@ -56,31 +85,20 @@ int applimits_list_for_child(
     if (!auth_is_logged_in() || !child_user_id || child_user_id[0] == '\0')
         return 0;
 
-    wchar_t path[256];
-    wchar_t child_id_w[64];
-
-    MultiByteToWideChar(
-        CP_UTF8, 0,
-        child_user_id, -1,
-        child_id_w, 64
-    );
-
-    swprintf(
-        path, 256,
-        L"/rest/v1/app_limits?select=*&child_user_id=eq.%ls&order=process_name.asc",
-        child_id_w
-    );
+    const std::wstring childIdW = utf8ToWide(child_user_id);
+    const std::wstring path =
+        L"/rest/v1/app_limits?select=*&child_user_id=eq." + childIdW + L"&order=process_name.asc";
 
     char response[16384] = {0};
     DWORD status = 0;
 
-    if (!restclient_call("GET", path, NULL, NULL, response, sizeof(response), &status))
+    if (!restclient_call("GET", path.c_str(), NULL, NULL, response, sizeof(response), &status))
         return 0;
 
     if (status < 200 || status >= 300)
         return 0;
 
-    return parse_limits_response(response, out, max_out);
+    return parseLimitsResponse(response, out, max_out);
 }
 
 int applimits_set(
@@ -102,35 +120,26 @@ int applimits_set(
         return 0;
     }
 
-    char proc_esc[600] = {0};
-    json_escape(process_name, proc_esc, sizeof(proc_esc));
+    const std::string procEsc = jsonEscape(process_name);
+    const char* blockedStr = blocked ? "true" : "false";
 
-    char body[900];
+    std::string body = "{\"child_user_id\":\"" + std::string(child_user_id) +
+                        "\",\"process_name\":\"" + procEsc + "\",\"daily_limit_sec\":";
 
     if (daily_limit_sec >= 0)
-    {
-        snprintf(
-            body, sizeof(body),
-            "{\"child_user_id\":\"%s\",\"process_name\":\"%s\",\"daily_limit_sec\":%d,\"blocked\":%s}",
-            child_user_id, proc_esc, daily_limit_sec, blocked ? "true" : "false"
-        );
-    }
+        body += std::to_string(daily_limit_sec);
     else
-    {
-        snprintf(
-            body, sizeof(body),
-            "{\"child_user_id\":\"%s\",\"process_name\":\"%s\",\"daily_limit_sec\":null,\"blocked\":%s}",
-            child_user_id, proc_esc, blocked ? "true" : "false"
-        );
-    }
+        body += "null";
+
+    body += ",\"blocked\":" + std::string(blockedStr) + "}";
 
     char response[2048] = {0};
     DWORD status = 0;
 
-    int ok = restclient_call(
+    const int ok = restclient_call(
         "POST",
         L"/rest/v1/app_limits?on_conflict=child_user_id,process_name",
-        body,
+        body.c_str(),
         L"Prefer: resolution=merge-duplicates,return=minimal\r\n",
         response, sizeof(response), &status
     );
@@ -158,15 +167,14 @@ int applimits_delete(
         return 0;
     }
 
-    wchar_t path[128];
-    swprintf(path, 128, L"/rest/v1/app_limits?id=eq.%ld", limit_id);
+    const std::wstring path = L"/rest/v1/app_limits?id=eq." + std::to_wstring(limit_id);
 
     char response[2048] = {0};
     DWORD status = 0;
 
     if (
         !restclient_call(
-            "DELETE", path, NULL,
+            "DELETE", path.c_str(), NULL,
             L"Prefer: return=minimal\r\n",
             response, sizeof(response), &status
         )

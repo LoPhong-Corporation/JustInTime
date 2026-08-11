@@ -5,6 +5,9 @@
 // service_role key khong bao gio phai nam trong client.
 //
 
+// Chế độ STABLE (C core). Xem src/shared/experimental/network.cpp
+// cho bản C++ tương đương (cùng interface network.h).
+
 #include "network.h"
 #include "config.h"
 #include "jsonutil.h"

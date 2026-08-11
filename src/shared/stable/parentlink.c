@@ -1,6 +1,9 @@
 //
 // parentlink.c
 //
+// Chế độ STABLE (C core). Xem src/shared/experimental/parentlink.cpp
+// cho bản C++ tương đương (cùng interface parentlink.h).
+//
 
 #include "parentlink.h"
 #include "restclient.h"
@@ -10,12 +13,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/*
- * Bỏ dấu ngoặc kép bao quanh 1 chuỗi JSON scalar, vd
- * "\"abc-def\"" -> "abc-def". Dùng cho response của RPC trả
- * về 1 giá trị scalar đơn (không phải object/array) - PostgREST
- * trả thẳng giá trị JSON-encode, có dấu ngoặc kép nếu là string.
- */
 static void strip_json_quotes(
     const char* in,
     char* out, int out_size)
@@ -53,8 +50,6 @@ int parentlink_invite_child(
         snprintf(err_out, err_out_size, "Vui long nhap email cua con.");
         return 0;
     }
-
-    /* ---- Bước 1: tra email -> user_id qua RPC ---- */
 
     char email_esc[400] = {0};
     json_escape(child_email, email_esc, sizeof(email_esc));
@@ -103,8 +98,6 @@ int parentlink_invite_child(
         return 0;
     }
 
-    /* ---- Bước 2: tạo lời mời (status mặc định 'pending') ---- */
-
     char insert_body[128];
     snprintf(insert_body, sizeof(insert_body), "{\"child_user_id\":\"%s\"}", child_user_id);
 
@@ -139,11 +132,6 @@ int parentlink_invite_child(
     return 0;
 }
 
-/*
- * Dùng chung cho cả list_as_parent và list_as_child - chỉ khác
- * tên RPC và tên field (child_user_id/child_email vs
- * parent_user_id/parent_email).
- */
 static int list_links(
     const wchar_t* rpc_path,
     const char* uuid_field,

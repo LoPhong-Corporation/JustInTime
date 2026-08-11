@@ -38,6 +38,30 @@ int db_build_daily_summary_text(
 );
 
 /*
+ * 1 dòng trong bảng tổng hợp app hôm nay (xem
+ * db_get_today_app_summary) - dùng cho UI có thể hiển thị icon
+ * riêng từng app (ControlPanelWindow::buildOverviewPage), thay vì
+ * chỉ có 1 khối text phẳng như db_build_daily_summary_text().
+ */
+typedef struct {
+    wchar_t process_name[512];
+    long long total_seconds;
+} DailyAppSummaryEntry;
+
+#define DAILY_APP_SUMMARY_MAX 15
+
+/*
+ * Giống db_build_daily_summary_text() nhưng trả về dữ liệu có cấu
+ * trúc (mảng process_name + tổng giây) thay vì text đã build sẵn -
+ * cùng 1 truy vấn SQL, chỉ khác điểm ra. Trả về số dòng lấy được
+ * (0 nếu chưa có dữ liệu hôm nay).
+ */
+int db_get_today_app_summary(
+    DailyAppSummaryEntry* out,
+    int max_entries
+);
+
+/*
  * Tổng số giây đã dùng HÔM NAY cho 1 process cụ thể (tính từ
  * 00:00 giờ địa phương) - dùng để đối chiếu với app_limits khi
  * kiểm tra giới hạn thời gian do phụ huynh đặt (xem

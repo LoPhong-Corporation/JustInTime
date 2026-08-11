@@ -1,0 +1,78 @@
+{{define "oauth_callback.html"}}
+<!DOCTYPE html>
+<html lang="{{.DS.Language}}">
+<head>
+    <meta charset="UTF-8">
+    <title>JustInTime Dashboard - Signing in…</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root { --app-font: {{css .FontStack}}; }
+    </style>
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-box" style="text-align:center;">
+            <h1>&#9679; JustInTime</h1>
+            <p id="oauth-status" style="color:#7e9ac0; font-size:13px;">{{.T.oauth_finishing}}</p>
+            <div id="oauth-error"></div>
+        </div>
+    </div>
+
+    <script>
+        // Supabase gửi kết quả OAuth về đây trong URL FRAGMENT
+        // (#access_token=...&refresh_token=...), không phải query
+        // string - nghĩa là server KHÔNG BAO GIỜ nhìn thấy được (đây
+        // là quy ước bảo mật chuẩn của OAuth implicit-style redirect,
+        // trình duyệt cố tình không gửi fragment lên server khi tải
+        // trang). Trang tĩnh này là nơi DUY NHẤT có thể đọc được nó,
+        // rồi chủ động gửi (qua POST, không qua URL) về server để
+        // lưu phiên đăng nhập.
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        const error_description = params.get('error_description');
+
+        const statusEl = document.getElementById('oauth-status');
+        const errorEl = document.getElementById('oauth-error');
+
+        async function complete() {
+            if (error_description) {
+                statusEl.textContent = '{{.T.oauth_failed}}';
+                errorEl.innerHTML = `<div class="error-banner">${decodeURIComponent(error_description).replace(/\+/g, ' ')}</div>`;
+                return;
+            }
+            if (!access_token || !refresh_token) {
+                statusEl.textContent = '{{.T.oauth_failed}}';
+                errorEl.innerHTML = `<div class="error-banner">{{.T.oauth_missing_tokens}}</div>`;
+                return;
+            }
+
+            try {
+                const res = await fetch('/auth/oauth/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ access_token, refresh_token }),
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    statusEl.textContent = '{{.T.oauth_failed}}';
+                    errorEl.innerHTML = `<div class="error-banner">${data.error}</div>`;
+                    return;
+                }
+
+                // Xoá fragment khỏi thanh địa chỉ (chứa dữ liệu nhạy
+                // cảm) trước khi rời trang, rồi mới chuyển hướng.
+                window.location.hash = '';
+                window.location.replace('/?view=cloud');
+            } catch (e) {
+                statusEl.textContent = '{{.T.oauth_failed}}';
+                errorEl.innerHTML = `<div class="error-banner">${e}</div>`;
+            }
+        }
+
+        complete();
+    </script>
+</body>
+</html>
+{{end}}

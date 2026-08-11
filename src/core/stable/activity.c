@@ -1,6 +1,9 @@
 //
 // Created by LoPhongCorporation on 6/24/2026.
 //
+// Chế độ STABLE (C core). Xem src/core/experimental/activity.cpp
+// cho bản C++ tương đương (cùng interface activity.h).
+//
 #include "activity.h"
 #include "database.h"
 #include "settings.h"

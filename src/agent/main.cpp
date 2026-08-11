@@ -28,6 +28,7 @@ extern "C" {
 #include "activity.h"
 #include "database.h"
 #include "sync.h"
+#include "machines.h"
 #include "backup.h"
 #include "config.h"
 #include "settings.h"
@@ -197,6 +198,18 @@ static void workerLoop(TrayIcon *tray)
         if (now - lastSync >= s.sync_interval_sec)
         {
             sync_pending_records();
+
+            /*
+             * FIX (đồng bộ máy không hoạt động): trước đây CHỈ
+             * dashboard-go đẩy heartbeat, nên "last_seen" của máy
+             * này đứng yên mãi nếu không ai mở dashboard web - máy
+             * khác luôn thấy nó "Offline". Agent C (luôn chạy nền)
+             * giờ tự đẩy heartbeat của chính mình cùng nhịp với
+             * sync - không quan trọng, bỏ qua lỗi nếu chưa đăng
+             * nhập/mất mạng, thử lại ở lần tiếp theo.
+             */
+            machines_push_heartbeat();
+
             lastSync = now;
         }
 
