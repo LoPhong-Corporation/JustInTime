@@ -127,6 +127,87 @@ func (d *DB) RecentActivities(limit int) ([]Activity, error) {
 	return out, rows.Err()
 }
 
+// UsageInRange returns total seconds spent per process within
+// [start, end) (unix seconds), most-used first — the general-purpose
+// version of Usage(), used by the history period picker (today,
+// yesterday, this week, last week, custom) so every period goes
+// through one code path instead of Usage()'s fixed "last N days"
+// window.
+func (d *DB) UsageInRange(start, end int64) ([]AppUsage, error) {
+	if d == nil || d.sql == nil {
+		return nil, fmt.Errorf("local database not available")
+	}
+
+	rows, err := d.sql.Query(
+		`SELECT process_name, SUM(duration_seconds) AS total
+		 FROM activity_logs
+		 WHERE start_time >= ? AND start_time < ?
+		 GROUP BY process_name
+		 ORDER BY total DESC
+		 LIMIT 20`,
+		start, end,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AppUsage
+	for rows.Next() {
+		var u AppUsage
+		if err := rows.Scan(&u.ProcessName, &u.TotalSeconds); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// DayTotal is total tracked seconds for one calendar day - used for
+// the "This week" / "Last week" bar-per-day view (a single 24h
+// timeline strip doesn't make sense across multiple days).
+type DayTotal struct {
+	Date         string `json:"date"` // "2006-01-02", local time
+	TotalSeconds int64  `json:"total_seconds"`
+}
+
+// DailyTotalsInRange returns one row per calendar day, given the
+// unix-second boundaries of each day (dayBoundaries[i] to
+// dayBoundaries[i+1]) - the caller (server.go) computes these using
+// the server's local time zone, so this function stays a plain query
+// with no date-math of its own.
+func (d *DB) DailyTotalsInRange(dayBoundaries []int64) ([]DayTotal, error) {
+	if d == nil || d.sql == nil {
+		return nil, fmt.Errorf("local database not available")
+	}
+	if len(dayBoundaries) < 2 {
+		return nil, nil
+	}
+
+	out := make([]DayTotal, 0, len(dayBoundaries)-1)
+
+	for i := 0; i < len(dayBoundaries)-1; i++ {
+		start := dayBoundaries[i]
+		end := dayBoundaries[i+1]
+
+		var total sql.NullInt64
+		row := d.sql.QueryRow(
+			`SELECT SUM(duration_seconds) FROM activity_logs WHERE start_time >= ? AND start_time < ?`,
+			start, end,
+		)
+		if err := row.Scan(&total); err != nil {
+			return nil, err
+		}
+
+		out = append(out, DayTotal{
+			Date:         time.Unix(start, 0).Format("2006-01-02"),
+			TotalSeconds: total.Int64,
+		})
+	}
+
+	return out, nil
+}
+
 // ActivitiesForDay returns every activity_logs row whose start_time
 // falls within [dayStart, dayEnd) (unix seconds, caller's local day
 // boundaries), oldest first - built for the visual Timeline (see

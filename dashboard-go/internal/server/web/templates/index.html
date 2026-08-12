@@ -106,20 +106,48 @@
              2) danh sách máy, 3) mọi thứ còn lại (CPU/RAM/Disk/Network,
              hiệu năng, alert, tiến trình, cấu hình...) xuống dưới cùng. -->
 
-        <!-- 1) Activity Timeline: thanh 24h trực quan cho hôm nay, dùng
-             /api/local/timeline (mỗi ứng dụng 1 màu, hover xem chi
-             tiết) - danh sách text cũ (loadActivityTimeline) vẫn còn
-             bên dưới cho ai muốn xem dạng danh sách/cuộn được. -->
+        <!-- 1) Activity Timeline: thanh 24h trực quan (chỉ với chế độ
+             1 ngày) hoặc biểu đồ cột theo ngày (chế độ nhiều ngày -
+             tuần này/tuần trước/tuỳ chọn), dùng /api/local/period +
+             /api/local/timeline. Danh sách text cũ (loadActivityTimeline)
+             vẫn còn bên dưới cho ai muốn xem dạng danh sách/cuộn được. -->
         <div class="section-title">
             {{.T.timeline_title}}
             <span style="font-weight:normal; font-size:11px; color:#5aa9ff; cursor:pointer;" id="timeline-today-label"></span>
         </div>
+
+        <div class="panel" style="margin-bottom:14px; padding:10px 14px;">
+            <div id="period-picker" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <button type="button" class="period-btn active" data-period="today">{{.T.period_today}}</button>
+                <button type="button" class="period-btn" data-period="yesterday">{{.T.period_yesterday}}</button>
+                <button type="button" class="period-btn" data-period="this_week">{{.T.period_this_week}}</button>
+                <button type="button" class="period-btn" data-period="last_week">{{.T.period_last_week}}</button>
+                <button type="button" class="period-btn" data-period="custom">{{.T.period_custom}}</button>
+                <span id="period-custom-range" style="display:none; align-items:center; gap:6px; margin-left:4px;">
+                    <input type="date" id="period-custom-from" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:5px 8px;border-radius:6px;font-family:inherit;font-size:12px;">
+                    <span style="color:#4a6584; font-size:12px;">&ndash;</span>
+                    <input type="date" id="period-custom-to" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:5px 8px;border-radius:6px;font-family:inherit;font-size:12px;">
+                    <button type="button" class="btn btn-outline" id="period-custom-apply" style="padding:5px 12px; font-size:12px;">{{.T.period_apply}}</button>
+                </span>
+            </div>
+        </div>
+
         <div class="panel" style="margin-bottom:20px;">
             <div id="timeline-visual-error"></div>
-            <div id="timeline-visual-strip" class="timeline-strip">
-                <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
+
+            <!-- Chế độ 1 ngày: thanh 24h -->
+            <div id="timeline-single-day-view">
+                <div id="timeline-visual-strip" class="timeline-strip">
+                    <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
+                </div>
+                <div id="timeline-visual-ruler" class="timeline-ruler"></div>
             </div>
-            <div id="timeline-visual-ruler" class="timeline-ruler"></div>
+
+            <!-- Chế độ nhiều ngày: cột tổng theo từng ngày -->
+            <div id="timeline-range-view" style="display:none;">
+                <div id="timeline-daily-bars" class="daily-bars"></div>
+            </div>
+
             <div id="timeline-visual-legend" class="timeline-legend"></div>
         </div>
 

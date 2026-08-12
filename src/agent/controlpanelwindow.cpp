@@ -415,7 +415,7 @@ void ControlPanelWindow::openWebDashboard()
         return;
     }
 
-    QString exePath = QCoreApplication::applicationDirPath() + "/dashboard.exe";
+    QString exePath = QCoreApplication::applicationDirPath() + "dashboard-go/dashboard.exe";
 
     if (!QFile::exists(exePath))
     {

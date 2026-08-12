@@ -191,6 +191,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/local/summary", s.handleLocalSummary)
 	s.mux.HandleFunc("/api/local/recent", s.handleLocalRecent)
 	s.mux.HandleFunc("/api/local/timeline", s.handleTimeline)
+	s.mux.HandleFunc("/api/local/period", s.handleLocalPeriod)
 	s.mux.HandleFunc("/api/local/chat", s.handleChat)
 	s.mux.HandleFunc("/api/local/insights", s.handleInsights)
 	s.mux.HandleFunc("/api/machines", s.handleMachines)
@@ -772,6 +773,116 @@ func (s *Server) handleLocalSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"mode": "local", "usage": usage})
+}
+
+// resolvePeriod turns a period keyword (+ optional from/to for
+// "custom") into a half-open [start, end) unix-second range and a
+// human label, all computed in the SERVER's local time zone (same
+// zone the C agent's SQLite timestamps use) so "today" means the
+// same thing here as it does in the tray app.
+func resolvePeriod(period, fromStr, toStr string) (start, end time.Time, label string, singleDay bool, err error) {
+	loc := time.Now().Location()
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+
+	// Thứ Hai là đầu tuần (ISO 8601, khớp thói quen lịch phổ biến ở
+	// VN) - Go's Weekday() có Sunday=0, cần quy đổi.
+	weekday := int(todayStart.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	mondayThisWeek := todayStart.AddDate(0, 0, -(weekday - 1))
+
+	switch period {
+	case "today", "":
+		return todayStart, todayStart.Add(24 * time.Hour), "today", true, nil
+
+	case "yesterday":
+		y := todayStart.Add(-24 * time.Hour)
+		return y, todayStart, "yesterday", true, nil
+
+	case "this_week":
+		return mondayThisWeek, mondayThisWeek.AddDate(0, 0, 7), "this_week", false, nil
+
+	case "last_week":
+		lastMonday := mondayThisWeek.AddDate(0, 0, -7)
+		return lastMonday, mondayThisWeek, "last_week", false, nil
+
+	case "custom":
+		if fromStr == "" {
+			return time.Time{}, time.Time{}, "", false, fmt.Errorf("from is required for period=custom")
+		}
+		if toStr == "" {
+			toStr = fromStr
+		}
+		from, perr := time.ParseInLocation("2006-01-02", fromStr, loc)
+		if perr != nil {
+			return time.Time{}, time.Time{}, "", false, fmt.Errorf("from must be YYYY-MM-DD")
+		}
+		to, perr := time.ParseInLocation("2006-01-02", toStr, loc)
+		if perr != nil {
+			return time.Time{}, time.Time{}, "", false, fmt.Errorf("to must be YYYY-MM-DD")
+		}
+		if to.Before(from) {
+			return time.Time{}, time.Time{}, "", false, fmt.Errorf("to must not be before from")
+		}
+		end := to.AddDate(0, 0, 1) // "to" is inclusive as a calendar day
+		return from, end, "custom", from.Equal(to), nil
+
+	default:
+		return time.Time{}, time.Time{}, "", false, fmt.Errorf("unknown period %q", period)
+	}
+}
+
+// handleLocalPeriod powers the history period picker (Today,
+// Yesterday, This week, Last week, Custom) shared by the visual
+// timeline and the usage-by-app table in the Local Activity tab.
+func (s *Server) handleLocalPeriod(w http.ResponseWriter, r *http.Request) {
+	period := r.URL.Query().Get("period")
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+
+	start, end, label, singleDay, err := resolvePeriod(period, from, to)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	usage, err := s.db.UsageInRange(start.Unix(), end.Unix())
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	resp := map[string]any{
+		"period":     label,
+		"from":       start.Format("2006-01-02"),
+		"to":         end.AddDate(0, 0, -1).Format("2006-01-02"),
+		"single_day": singleDay,
+		"usage":      usage,
+	}
+
+	if singleDay {
+		// Frontend hiển thị thanh timeline 24h qua /api/local/timeline
+		// riêng - chỉ cần biết ngày để nó tự gọi.
+		resp["date"] = start.Format("2006-01-02")
+	} else {
+		// Nhiều ngày: 1 thanh timeline 24h không còn hợp lý nữa - đổi
+		// sang biểu đồ cột tổng theo từng ngày.
+		dayBoundaries := make([]int64, 0)
+		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+			dayBoundaries = append(dayBoundaries, d.Unix())
+		}
+
+		daily, derr := s.db.DailyTotalsInRange(dayBoundaries)
+		if derr != nil {
+			writeErr(w, http.StatusServiceUnavailable, derr.Error())
+			return
+		}
+		resp["daily_totals"] = daily
+	}
+
+	writeJSON(w, resp)
 }
 
 func (s *Server) handleLocalRecent(w http.ResponseWriter, r *http.Request) {

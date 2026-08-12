@@ -502,56 +502,159 @@ function fmtClock(unixSec) {
     return new Date(unixSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// ---------------- History period picker (Today/Yesterday/This week/Last week/Custom) ----------------
+
+let currentPeriod = 'today';
+let currentCustomFrom = '';
+let currentCustomTo = '';
+
+// Cùng bảng màu + thuật toán băm với timelineColorFor() phía Go
+// (server.go) - để 1 app luôn ra CÙNG 1 màu dù đang xem chế độ 1
+// ngày (màu do server gán) hay nhiều ngày (màu tự tính ở đây, vì
+// /api/local/period không đi kèm timeline segment nào để lấy màu).
+const PERIOD_COLORS = ['#5aa9ff', '#22c55e', '#f5a524', '#a78bfa', '#f472b6', '#2dd4bf', '#fb923c', '#eab308', '#60a5fa', '#e879f9'];
+function colorForProcess(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return PERIOD_COLORS[h % PERIOD_COLORS.length];
+}
+
+document.querySelectorAll('.period-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const period = btn.dataset.period;
+        document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const customRange = document.getElementById('period-custom-range');
+        if (period === 'custom') {
+            customRange.style.display = 'inline-flex';
+            return; // chờ người dùng chọn ngày + bấm Apply
+        }
+        customRange.style.display = 'none';
+
+        currentPeriod = period;
+        loadTimelineVisual();
+    });
+});
+
+document.getElementById('period-custom-apply')?.addEventListener('click', () => {
+    const from = document.getElementById('period-custom-from').value;
+    const to = document.getElementById('period-custom-to').value;
+    if (!from) return;
+
+    currentPeriod = 'custom';
+    currentCustomFrom = from;
+    currentCustomTo = to || from;
+    loadTimelineVisual();
+});
+
+function periodQueryString() {
+    const p = new URLSearchParams({ period: currentPeriod });
+    if (currentPeriod === 'custom') {
+        p.set('from', currentCustomFrom);
+        p.set('to', currentCustomTo);
+    }
+    return p.toString();
+}
+
 async function loadTimelineVisual() {
     const stripEl = document.getElementById('timeline-visual-strip');
     const rulerEl = document.getElementById('timeline-visual-ruler');
     const legendEl = document.getElementById('timeline-visual-legend');
     const errorDiv = document.getElementById('timeline-visual-error');
     const labelEl = document.getElementById('timeline-today-label');
+    const singleDayView = document.getElementById('timeline-single-day-view');
+    const rangeView = document.getElementById('timeline-range-view');
+    const barsEl = document.getElementById('timeline-daily-bars');
     if (!stripEl) return;
 
     errorDiv.innerHTML = '';
 
     try {
-        const res = await fetch('/api/local/timeline');
-        const data = await res.json();
+        const periodRes = await fetch(`/api/local/period?${periodQueryString()}`);
+        const periodData = await periodRes.json();
 
-        if (data.error) {
-            errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+        if (periodData.error) {
+            errorDiv.innerHTML = `<div class="error-banner">${periodData.error}</div>`;
             return;
         }
 
-        if (labelEl) labelEl.textContent = data.date || '';
+        if (periodData.single_day) {
+            // ---- Chế độ 1 ngày: thanh 24h (dùng /api/local/timeline
+            //      để lấy màu + đoạn thời gian chi tiết) ----
+            singleDayView.style.display = 'block';
+            rangeView.style.display = 'none';
 
-        const segments = data.segments || [];
+            const res = await fetch(`/api/local/timeline?date=${encodeURIComponent(periodData.date)}`);
+            const data = await res.json();
 
-        if (!segments.length) {
-            stripEl.innerHTML = `<p style="color:#4a6584; font-size:13px; padding:12px;">${LABELS.timelineNoData || 'No activity recorded yet today.'}</p>`;
-            legendEl.innerHTML = '';
+            if (data.error) {
+                errorDiv.innerHTML = `<div class="error-banner">${data.error}</div>`;
+                return;
+            }
+
+            if (labelEl) labelEl.textContent = data.date || '';
+
+            const segments = data.segments || [];
+
+            if (!segments.length) {
+                stripEl.innerHTML = `<p style="color:#4a6584; font-size:13px; padding:12px;">${LABELS.timelineNoData || 'No activity recorded.'}</p>`;
+                legendEl.innerHTML = '';
+            } else {
+                stripEl.innerHTML = segments.map(s => `
+                    <div class="timeline-segment"
+                         style="left:${s.start_pct}%; width:${s.width_pct}%; background:${s.color};"
+                         title="${s.process_name} — ${fmtClock(s.start_time)} to ${fmtClock(s.end_time)}${s.window_title ? ' — ' + s.window_title.substring(0, 60) : ''}">
+                    </div>
+                `).join('');
+
+                const legend = data.legend || [];
+                legendEl.innerHTML = legend.map(l => `
+                    <div class="timeline-legend-item">
+                        <span class="timeline-legend-dot" style="background:${l.color};"></span>
+                        ${l.process_name} — ${fmtDuration(l.total_seconds)}
+                    </div>
+                `).join('');
+            }
+
+            if (!rulerEl.dataset.built) {
+                rulerEl.innerHTML = [0, 6, 12, 18, 24].map(h => `
+                    <span style="left:${(h / 24) * 100}%;">${String(h).padStart(2, '0')}:00</span>
+                `).join('');
+                rulerEl.dataset.built = '1';
+            }
         } else {
-            stripEl.innerHTML = segments.map(s => `
-                <div class="timeline-segment"
-                     style="left:${s.start_pct}%; width:${s.width_pct}%; background:${s.color};"
-                     title="${s.process_name} — ${fmtClock(s.start_time)} to ${fmtClock(s.end_time)}${s.window_title ? ' — ' + s.window_title.substring(0, 60) : ''}">
-                </div>
-            `).join('');
+            // ---- Chế độ nhiều ngày (tuần này/tuần trước/tuỳ chọn):
+            //      cột tổng theo từng ngày + bảng tổng theo app ----
+            singleDayView.style.display = 'none';
+            rangeView.style.display = 'block';
 
-            const legend = data.legend || [];
-            legendEl.innerHTML = legend.map(l => `
-                <div class="timeline-legend-item">
-                    <span class="timeline-legend-dot" style="background:${l.color};"></span>
-                    ${l.process_name} — ${fmtDuration(l.total_seconds)}
-                </div>
-            `).join('');
-        }
+            if (labelEl) labelEl.textContent = `${periodData.from} → ${periodData.to}`;
 
-        // Vạch mốc giờ 0h/6h/12h/18h/24h dọc theo thanh - chỉ vẽ 1
-        // lần (không đổi giữa các lần refresh) để tránh giật hình.
-        if (!rulerEl.dataset.built) {
-            rulerEl.innerHTML = [0, 6, 12, 18, 24].map(h => `
-                <span style="left:${(h / 24) * 100}%;">${String(h).padStart(2, '0')}:00</span>
-            `).join('');
-            rulerEl.dataset.built = '1';
+            const days = periodData.daily_totals || [];
+            const maxSeconds = Math.max(1, ...days.map(d => d.total_seconds));
+
+            barsEl.innerHTML = days.map(d => {
+                const heightPct = Math.max(2, (d.total_seconds / maxSeconds) * 100);
+                const dayLabel = new Date(d.date + 'T00:00:00').toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+                return `
+                    <div class="daily-bar-col">
+                        <div class="daily-bar-value">${d.total_seconds > 0 ? fmtDuration(d.total_seconds) : ''}</div>
+                        <div class="daily-bar" style="height:${heightPct}%;" title="${d.date}: ${fmtDuration(d.total_seconds)}"></div>
+                        <div class="daily-bar-label">${dayLabel}</div>
+                    </div>
+                `;
+            }).join('');
+
+            const usage = periodData.usage || [];
+            legendEl.innerHTML = usage.length
+                ? usage.map(u => `
+                    <div class="timeline-legend-item">
+                        <span class="timeline-legend-dot" style="background:${colorForProcess(u.process_name)};"></span>
+                        ${u.process_name} — ${fmtDuration(u.total_seconds)}
+                    </div>
+                `).join('')
+                : `<p style="color:#4a6584; font-size:13px;">${LABELS.timelineNoData || 'No activity recorded.'}</p>`;
         }
     } catch (e) {
         errorDiv.innerHTML = `<div class="error-banner">Connection error: ${e}</div>`;
