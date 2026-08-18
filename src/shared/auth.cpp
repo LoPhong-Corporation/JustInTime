@@ -1,8 +1,8 @@
 //
 // auth.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong auth.h, hành vi 100% giống bản STABLE (đăng nhập/
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong auth.h), hành vi 100% giống bản C gốc trước khi chuyển đổi (đăng nhập/
 // đăng ký/refresh qua Supabase Auth, lưu session mã hoá DPAPI). Đổi
 // cách viết:
 //   - RAII cho HINTERNET (lớp WinHttpHandle, giống restclient.cpp).

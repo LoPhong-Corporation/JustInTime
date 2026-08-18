@@ -105,20 +105,7 @@ static QString formatHMS(long long totalSeconds)
 
 ControlPanelWindow::ControlPanelWindow(QWidget *parent) : QMainWindow(parent)
 {
-    /*
-     * Chỉ gắn thẻ vào tiêu đề cửa sổ khi đang chạy bản EXPERIMENTAL -
-     * đây là dấu hiệu CẢNH BÁO cho người dùng/dev biết ngay họ đang
-     * chạy bản thử nghiệm, không cần mở tới trang Development mới
-     * biết. Bản STABLE (mặc định) không cần thẻ gì thêm.
-     */
-#ifdef JUSTINTIME_CORE_MODE
-    if (QString(JUSTINTIME_CORE_MODE) == "EXPERIMENTAL")
-        setWindowTitle(tr_("cp.title") + " [EXPERIMENTAL]");
-    else
-        setWindowTitle(tr_("cp.title"));
-#else
     setWindowTitle(tr_("cp.title"));
-#endif
     resize(940, 640);
     setMinimumSize(800, 560);
 
@@ -229,16 +216,6 @@ ControlPanelWindow::ControlPanelWindow(QWidget *parent) : QMainWindow(parent)
     buildAboutPage();
     m_sidebar->addItem(new QListWidgetItem(style()->standardIcon(QStyle::SP_MessageBoxQuestion), tr_("cp.nav_about")));
     m_rowAbout = m_sidebar->count() - 1;
-
-    /*
-     * Mục "Development" tách RIÊNG khỏi About - đây là nơi chuyên
-     * cho thông tin build/kỹ thuật (chế độ core Stable/Experimental
-     * đang chạy...), không lẫn vào thông tin giới thiệu app chung
-     * chung ở About.
-     */
-    buildDevelopmentPage();
-    m_sidebar->addItem(new QListWidgetItem(style()->standardIcon(QStyle::SP_DialogHelpButton), tr_("cp.nav_development")));
-    m_rowDevelopment = m_sidebar->count() - 1;
 
     connect(m_sidebar, &QListWidget::currentRowChanged, this, &ControlPanelWindow::onSidebarRowChanged);
 
@@ -415,7 +392,7 @@ void ControlPanelWindow::openWebDashboard()
         return;
     }
 
-    QString exePath = QCoreApplication::applicationDirPath() + "dashboard-go/dashboard.exe";
+    QString exePath = QCoreApplication::applicationDirPath() + "/dashboard.exe";
 
     if (!QFile::exists(exePath))
     {
@@ -490,88 +467,6 @@ void ControlPanelWindow::buildAboutPage()
     layout->addLayout(headRow);
     layout->addSpacing(16);
     layout->addWidget(body);
-    layout->addStretch();
-
-    m_stack->addWidget(page);
-}
-
-void ControlPanelWindow::buildDevelopmentPage()
-{
-    auto *page = new QWidget;
-
-    auto *heading = new QLabel(tr_("cp.nav_development"), page);
-    heading->setStyleSheet("font-size: 16px; font-weight: 600;");
-
-    auto *subtitle = new QLabel(tr_("dev.subtitle"), page);
-    subtitle->setWordWrap(true);
-    subtitle->setStyleSheet("color: #7e9ac0; font-size: 12px;");
-
-    /*
-     * Đọc trực tiếp JUSTINTIME_CORE_MODE - macro do CMakeLists.txt
-     * định nghĩa lúc build (target_compile_definitions), phản ánh
-     * ĐÚNG file .exe đang chạy, không đổi được lúc runtime.
-     */
-#ifdef JUSTINTIME_CORE_MODE
-    const QString coreMode = JUSTINTIME_CORE_MODE;
-#else
-    const QString coreMode = "STABLE";
-#endif
-    const bool isExperimental = (coreMode == "EXPERIMENTAL");
-
-    auto *coreBox = new QFrame(page);
-    coreBox->setObjectName("card");
-    auto *coreBoxLayout = new QVBoxLayout(coreBox);
-
-    auto *coreBoxTitle = new QLabel(tr_("dev.core_mode_title"), coreBox);
-    coreBoxTitle->setStyleSheet("font-weight: 600;");
-
-    auto *coreBadge = new QLabel(
-        isExperimental ? tr_("dev.badge_experimental") : tr_("dev.badge_stable"),
-        coreBox
-    );
-    coreBadge->setStyleSheet(
-        isExperimental
-            ? "color: #f5a524; font-size: 12px; font-weight: 700; "
-              "background: rgba(245,165,36,0.15); border: 1px solid rgba(245,165,36,0.4); "
-              "border-radius: 6px; padding: 3px 10px;"
-            : "color: #22c55e; font-size: 12px; font-weight: 700; "
-              "background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); "
-              "border-radius: 6px; padding: 3px 10px;"
-    );
-    coreBadge->setFixedWidth(coreBadge->sizeHint().width() + 4);
-
-    auto *coreDesc = new QLabel(
-        isExperimental ? tr_("dev.core_desc_experimental") : tr_("dev.core_desc_stable"),
-        coreBox
-    );
-    coreDesc->setWordWrap(true);
-    coreDesc->setStyleSheet("color: #b9c8de; font-size: 12px;");
-
-    coreBoxLayout->addWidget(coreBoxTitle);
-    coreBoxLayout->addWidget(coreBadge, 0, Qt::AlignLeft);
-    coreBoxLayout->addWidget(coreDesc);
-
-    auto *switchNote = new QFrame(page);
-    switchNote->setObjectName("card");
-    auto *switchNoteLayout = new QVBoxLayout(switchNote);
-
-    auto *switchTitle = new QLabel(tr_("dev.switch_title"), switchNote);
-    switchTitle->setStyleSheet("font-weight: 600;");
-
-    auto *switchBody = new QLabel(tr_("dev.switch_body"), switchNote);
-    switchBody->setWordWrap(true);
-    switchBody->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    switchBody->setStyleSheet("color: #b9c8de; font-size: 12px; font-family: Consolas, monospace;");
-
-    switchNoteLayout->addWidget(switchTitle);
-    switchNoteLayout->addWidget(switchBody);
-
-    auto *layout = new QVBoxLayout(page);
-    layout->addWidget(heading);
-    layout->addWidget(subtitle);
-    layout->addSpacing(8);
-    layout->addWidget(coreBox);
-    layout->addWidget(switchNote);
     layout->addStretch();
 
     m_stack->addWidget(page);
@@ -757,7 +652,6 @@ int ControlPanelWindow::pageToRow(Page page) const
         case PageFamily:     return m_rowFamily;
         case PageAdvanced:   return m_rowAdvanced;
         case PageAbout:      return m_rowAbout;
-        case PageDevelopment: return m_rowDevelopment;
     }
     return m_rowOverview;
 }

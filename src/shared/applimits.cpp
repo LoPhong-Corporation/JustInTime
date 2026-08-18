@@ -1,7 +1,7 @@
 //
 // applimits.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface extern "C" trong
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface extern "C" trong
 // applimits.h). Logic giữ nguyên 100% - chỉ đổi cách dựng
 // path/body sang std::string thay vì swprintf/snprintf vào buffer
 // cấp phát tay ở từng hàm.

@@ -1,7 +1,7 @@
 //
 // machines.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface extern "C" trong
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface extern "C" trong
 // machines.h - ControlPanelWindow.cpp và main.cpp gọi vào không cần
 // đổi gì). Hành vi giữ nguyên 100% so với bản C trước - xem
 // machines.h để biết lý do file này tồn tại (agent tự đẩy heartbeat,

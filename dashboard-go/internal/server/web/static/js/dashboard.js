@@ -499,14 +499,73 @@ setInterval(loadMachines, 30000);
 // ---------------- Visual 24h Timeline strip ----------------
 
 function fmtClock(unixSec) {
-    return new Date(unixSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // TIME_FORMAT (cài đặt Settings > Appearance): "12h" hoặc "24h" -
+    // mặc định "24h" nếu chưa từng đặt (khớp Defaults() phía Go).
+    const use12h = TIME_FORMAT === '12h';
+    return new Date(unixSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: use12h });
 }
+
+function fmtHourLabel(hour24) {
+    if (TIME_FORMAT !== '12h') return String(hour24).padStart(2, '0') + ':00';
+    const h = hour24 % 24; // mốc cuối cùng (24) hiển thị như 0h dạng 12h, hợp lý vì đang ở rìa phải cùng
+    if (h === 0) return '12 AM';
+    if (h === 12) return '12 PM';
+    return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+// ---------------- Timeline zoom (chỉ áp dụng chế độ 1 ngày) ----------------
+
+let timelineZoom = 1; // 1 = 100%, tối đa 8 = 800%
+const TIMELINE_ZOOM_MIN = 1;
+const TIMELINE_ZOOM_MAX = 8;
+const TIMELINE_ZOOM_STEP = 0.5;
+
+function applyTimelineZoom() {
+    const content = document.getElementById('timeline-zoom-content');
+    const levelLabel = document.getElementById('tl-zoom-level');
+    if (!content) return;
+
+    // Đặt bề rộng khối chứa strip+ruler theo % mức zoom - vì mọi
+    // segment/mốc giờ bên trong đã định vị bằng % tương đối (left/
+    // width tính theo %), việc kéo dài khối cha ra sẽ tự "kéo dãn"
+    // toàn bộ nội dung theo đúng tỷ lệ mà không cần tính lại bất kỳ
+    // giá trị % nào - .timeline-zoom-viewport tự hiện thanh cuộn
+    // ngang khi content rộng hơn khung nhìn.
+    content.style.width = (timelineZoom * 100) + '%';
+    if (levelLabel) levelLabel.textContent = Math.round(timelineZoom * 100) + '%';
+}
+
+function zoomTimeline(delta) {
+    timelineZoom = Math.min(TIMELINE_ZOOM_MAX, Math.max(TIMELINE_ZOOM_MIN, timelineZoom + delta));
+    applyTimelineZoom();
+}
+
+document.getElementById('tl-zoom-in')?.addEventListener('click', () => zoomTimeline(TIMELINE_ZOOM_STEP));
+document.getElementById('tl-zoom-out')?.addEventListener('click', () => zoomTimeline(-TIMELINE_ZOOM_STEP));
+document.getElementById('tl-zoom-reset')?.addEventListener('click', () => { timelineZoom = 1; applyTimelineZoom(); });
+
+// Ctrl + cuộn chuột để zoom (giữ Ctrl để không "cướp" thao tác cuộn
+// trang bình thường của người dùng khi họ chỉ lướt qua timeline).
+document.getElementById('timeline-zoom-viewport')?.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    zoomTimeline(e.deltaY < 0 ? TIMELINE_ZOOM_STEP : -TIMELINE_ZOOM_STEP);
+}, { passive: false });
 
 // ---------------- History period picker (Today/Yesterday/This week/Last week/Custom) ----------------
 
-let currentPeriod = 'today';
+let currentPeriod = (typeof DEFAULT_PERIOD !== 'undefined' && DEFAULT_PERIOD) ? DEFAULT_PERIOD : 'today';
 let currentCustomFrom = '';
 let currentCustomTo = '';
+
+// Đánh dấu đúng nút period đang chọn theo cài đặt mặc định (Settings
+// > Appearance > Default period) - trước đây "Today" luôn được tô
+// đậm sẵn trong HTML bất kể cài đặt, giờ đồng bộ đúng lựa chọn thật.
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.period-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.period === currentPeriod);
+    });
+});
 
 // Cùng bảng màu + thuật toán băm với timelineColorFor() phía Go
 // (server.go) - để 1 app luôn ra CÙNG 1 màu dù đang xem chế độ 1
@@ -619,10 +678,12 @@ async function loadTimelineVisual() {
 
             if (!rulerEl.dataset.built) {
                 rulerEl.innerHTML = [0, 6, 12, 18, 24].map(h => `
-                    <span style="left:${(h / 24) * 100}%;">${String(h).padStart(2, '0')}:00</span>
+                    <span style="left:${(h / 24) * 100}%;">${fmtHourLabel(h % 24)}</span>
                 `).join('');
                 rulerEl.dataset.built = '1';
             }
+
+            applyTimelineZoom();
         } else {
             // ---- Chế độ nhiều ngày (tuần này/tuần trước/tuỳ chọn):
             //      cột tổng theo từng ngày + bảng tổng theo app ----

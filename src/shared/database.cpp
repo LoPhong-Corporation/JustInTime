@@ -1,9 +1,9 @@
 //
 // database.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong database.h, TOÀN BỘ câu SQL và logic nghiệp vụ
-// giữ nguyên 100% so với bản STABLE. Đổi cách viết:
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong database.h), TOÀN BỘ câu SQL và logic nghiệp vụ
+// giữ nguyên 100% so với bản C gốc trước khi chuyển đổi. Đổi cách viết:
 //   - RAII cho sqlite3_stmt* (lớp Stmt bên dưới) - tự gọi
 //     sqlite3_finalize() khi ra khỏi scope, ở MỌI nhánh return (kể
 //     cả early-return khi prepare lỗi). Bản C cũ có rất nhiều hàm

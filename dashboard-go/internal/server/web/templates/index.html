@@ -135,12 +135,24 @@
         <div class="panel" style="margin-bottom:20px;">
             <div id="timeline-visual-error"></div>
 
-            <!-- Chế độ 1 ngày: thanh 24h -->
+            <!-- Chế độ 1 ngày: thanh 24h, zoom được (kéo dài trục ngang
+                 để xem chi tiết những khoảng thời gian đổi app dồn dập) -->
             <div id="timeline-single-day-view">
-                <div id="timeline-visual-strip" class="timeline-strip">
-                    <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
+                <div class="timeline-zoom-toolbar">
+                    <button type="button" class="btn btn-outline" id="tl-zoom-out" title="{{.T.timeline_zoom_out}}">&minus;</button>
+                    <span id="tl-zoom-level">100%</span>
+                    <button type="button" class="btn btn-outline" id="tl-zoom-in" title="{{.T.timeline_zoom_in}}">+</button>
+                    <button type="button" class="btn btn-outline" id="tl-zoom-reset">{{.T.timeline_zoom_reset}}</button>
+                    <span style="color:#4a6584; font-size:11px; margin-left:auto;">{{.T.timeline_zoom_hint}}</span>
                 </div>
-                <div id="timeline-visual-ruler" class="timeline-ruler"></div>
+                <div class="timeline-zoom-viewport" id="timeline-zoom-viewport">
+                    <div class="timeline-zoom-content" id="timeline-zoom-content">
+                        <div id="timeline-visual-strip" class="timeline-strip">
+                            <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
+                        </div>
+                        <div id="timeline-visual-ruler" class="timeline-ruler"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Chế độ nhiều ngày: cột tổng theo từng ngày -->
@@ -584,6 +596,8 @@
 
         const DEVICE_ID = {{json .DeviceID}};
         const DEVICE_LABEL = {{json .DeviceLabel}};
+        const TIME_FORMAT = {{json .DS.TimeFormat}};
+        const DEFAULT_PERIOD = {{json .DS.DefaultPeriod}};
 
         const LABELS = {
             cpuHigh: {{json .T.alert_cpu_high}},

@@ -1,7 +1,7 @@
 //
 // device.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface extern "C" trong
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface extern "C" trong
 // device.h). Về hành vi, KHÔNG đổi gì so với bản C trước (đọc kỹ
 // phần mô tả gốc bên dưới nếu cần) - chỉ đổi cách viết:
 //   - std::mutex (qua 1 static local "magic static", an toàn luồng

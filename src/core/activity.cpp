@@ -1,11 +1,11 @@
 //
 // activity.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong activity.h. Đây là module NHẠY CẢM NHẤT về đồng
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong activity.h). Đây là module NHẠY CẢM NHẤT về đồng
 // bộ hoá luồng (worker thread ghi, GUI thread + HTTP thread đọc), nên
 // khi chuyển đổi mình giữ NGUYÊN VẸN từng ranh giới khoá/mở khoá y
-// hệt bản STABLE - không gộp, không tách thêm, không đổi thời điểm
+// hệt bản C gốc trước khi chuyển đổi - không gộp, không tách thêm, không đổi thời điểm
 // lock được giữ hay nhả (đặc biệt là finish_current_record(), nơi
 // lock CHỦ Ý được nhả trước khi gọi settings_get()/db_insert_activity()
 // để tránh giữ khoá trong lúc I/O). Chỉ đổi:
@@ -157,7 +157,7 @@ void finishCurrentRecord()
     }
     // <-- lock nhả ở đây (hết scope) - CHỦ Ý, để không giữ khoá trong
     //     lúc I/O (settings_is_process_excluded/settings_get/
-    //     db_insert_activity bên dưới), y hệt bản STABLE.
+    //     db_insert_activity bên dưới), y hệt bản C gốc trước khi chuyển đổi.
 
     do
     {
@@ -433,11 +433,8 @@ int activity_check_limits(
             /*
              * Cộng thêm thời gian của phiên đang mở (nếu đúng là
              * process đang bị giới hạn và bắt đầu trong hôm nay) vào
-             * db_get_today_seconds() - xem ghi chú đầy đủ trong bản
-             * STABLE (src/core/stable/activity.c) về lý do fix này
-             * tồn tại (db_get_today_seconds() chỉ cộng các bản ghi ĐÃ
-             * đóng, phiên đang mở không tính vào cho tới khi nó tự
-             * đóng).
+             * db_get_today_seconds() (chỉ cộng các bản ghi ĐÃ đóng,
+             * phiên đang mở không tính vào cho tới khi nó tự đóng).
              */
             long usedToday = db_get_today_seconds(currentProcess);
 

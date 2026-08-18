@@ -1797,6 +1797,12 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		if v := r.FormValue("language"); v != "" {
 			ds.Language = v
 		}
+		if v := r.FormValue("time_format"); v == "12h" || v == "24h" {
+			ds.TimeFormat = v
+		}
+		if v := r.FormValue("default_period"); v == "today" || v == "yesterday" || v == "this_week" || v == "last_week" {
+			ds.DefaultPeriod = v
+		}
 		if v, err := strconv.Atoi(r.FormValue("cpu_threshold")); err == nil {
 			ds.CPUThreshold = v
 		}

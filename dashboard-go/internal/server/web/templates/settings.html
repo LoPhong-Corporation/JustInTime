@@ -74,6 +74,20 @@
                 <option value="vi" {{if eq .DS.Language "vi"}}selected{{end}}>{{.T.lang_vi}}</option>
             </select>
 
+            <label>{{.T.time_format}}</label>
+            <select name="time_format">
+                <option value="24h" {{if eq .DS.TimeFormat "24h"}}selected{{end}}>{{.T.time_format_24h}}</option>
+                <option value="12h" {{if eq .DS.TimeFormat "12h"}}selected{{end}}>{{.T.time_format_12h}}</option>
+            </select>
+
+            <label>{{.T.default_period}}</label>
+            <select name="default_period">
+                <option value="today" {{if eq .DS.DefaultPeriod "today"}}selected{{end}}>{{.T.period_today}}</option>
+                <option value="yesterday" {{if eq .DS.DefaultPeriod "yesterday"}}selected{{end}}>{{.T.period_yesterday}}</option>
+                <option value="this_week" {{if eq .DS.DefaultPeriod "this_week"}}selected{{end}}>{{.T.period_this_week}}</option>
+                <option value="last_week" {{if eq .DS.DefaultPeriod "last_week"}}selected{{end}}>{{.T.period_last_week}}</option>
+            </select>
+
             <label>{{.T.cpu_threshold}}</label>
             <input type="number" name="cpu_threshold" min="1" max="100" value="{{.DS.CPUThreshold}}">
 

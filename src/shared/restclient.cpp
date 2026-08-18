@@ -1,7 +1,7 @@
 //
 // restclient.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên 100% interface extern "C" trong
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên 100% interface extern "C" trong
 // restclient.h - mọi file .c/.cpp gọi vào đây không cần đổi gì cả).
 //
 // Thay đổi thật sự nằm ở CÁCH VIẾT bên trong:

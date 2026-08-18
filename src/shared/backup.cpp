@@ -4,7 +4,7 @@
 // đồng bộ lên Supabase, để đảm bảo luôn có ít nhất một bản sao dữ
 // liệu an toàn ngay cả khi mất kết nối mạng dài ngày.
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface extern "C" trong
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface extern "C" trong
 // backup.h). Thay đổi thật sự:
 //   - std::vector<std::string> thay cho "char names[512][MAX_PATH]"
 //     cấp phát tay trên stack (~133KB!) - bản C cũ giới hạn CỨNG 512

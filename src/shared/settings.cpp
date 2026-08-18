@@ -1,8 +1,8 @@
 //
 // settings.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong settings.h, hành vi 100% giống bản STABLE. Đổi
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong settings.h), hành vi 100% giống bản C gốc trước khi chuyển đổi. Đổi
 // cách viết:
 //   - std::mutex (magic static) thay CRITICAL_SECTION tự quản -
 //     cùng lý do đã nêu ở device.cpp (tránh race condition lý

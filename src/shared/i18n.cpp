@@ -1,14 +1,13 @@
 //
 // i18n.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong i18n.h. BẢNG DỊCH GIỮ NGUYÊN 100% (copy y hệt từ
-// bản STABLE, không dịch lại/không đổi bất kỳ chuỗi nào) - chỉ khác
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong i18n.h). BẢNG DỊCH GIỮ NGUYÊN 100% (copy y hệt từ bản C gốc, không dịch lại/không đổi bất kỳ chuỗi nào) - chỉ khác
 // CÁCH TRA CỨU:
-//   - Bản STABLE: quét tuyến tính (O(n)) qua mảng g_entries mỗi lần
+//   - Bản C gốc: quét tuyến tính (O(n)) qua mảng g_entries mỗi lần
 //     gọi i18n_t() - với ~150 dòng dịch, không chậm tới mức đáng lo,
 //     nhưng vẫn là chỗ có thể cải thiện rõ ràng.
-//   - Bản EXPERIMENTAL: dựng 1 std::unordered_map<string,Entry> MỘT
+//   - Giờ dựng 1 std::unordered_map<string,Entry> MỘT
 //     LẦN DUY NHẤT (magic static, an toàn luồng) từ chính mảng dữ
 //     liệu này, tra cứu sau đó là O(1) trung bình.
 //
@@ -215,7 +214,6 @@ const I18nEntry g_entries[] = {
     {"cp.nav_family",         "Family",                             "Gia đình"},
     {"cp.nav_advanced",       "Advanced",                           "Nâng cao"},
     {"cp.nav_about",          "About",                              "Giới thiệu"},
-    {"cp.nav_development",    "Development",                        "Phát triển"},
 
     {"cp.overview_greeting_in",
         "Welcome back",
@@ -319,39 +317,6 @@ const I18nEntry g_entries[] = {
     {"supabase.key_label",       "Publishable Key:",                    "Publishable Key:"},
     {"supabase.save_btn",        "Save",                                "Lưu"},
     {"supabase.saved",           "Supabase configuration saved.",       "Đã lưu cấu hình Supabase."},
-
-    /* ---- Development page (build info - dành cho dev/người tò mò,
-       KHÔNG phải cấu hình người dùng thường cần đụng vào) ---- */
-    {"dev.subtitle",
-        "Build/technical information - most people never need this page.",
-        "Thông tin kỹ thuật/build - hầu hết mọi người không cần trang này."},
-    {"dev.core_mode_title",   "Core implementation",                "Lõi đang dùng"},
-    {"dev.badge_stable",      "STABLE (C)",                          "STABLE (C)"},
-    {"dev.badge_experimental","EXPERIMENTAL (C++)",                  "EXPERIMENTAL (C++)"},
-    {"dev.core_desc_stable",
-        "This build uses the original, battle-tested C implementation "
-        "for the core data/network modules. This is the recommended "
-        "choice for everyday use.",
-        "Bản build này dùng lõi C gốc, đã chạy ổn định lâu dài cho các "
-        "module dữ liệu/mạng cốt lõi. Đây là lựa chọn khuyến nghị cho "
-        "dùng hàng ngày."},
-    {"dev.core_desc_experimental",
-        "This build uses the newer C++ rewrite (RAII, std::string, "
-        "std::mutex...) for the same modules. It hasn't run in the "
-        "field long enough to be considered as proven as the Stable "
-        "build yet - useful for development and comparison, not "
-        "recommended as your only build.",
-        "Bản build này dùng bản viết lại C++ mới hơn (RAII, "
-        "std::string, std::mutex...) cho cùng các module. Chưa chạy đủ "
-        "lâu ngoài thực tế để coi là ổn định như bản Stable - hữu ích "
-        "để phát triển/so sánh, không khuyến nghị dùng làm bản duy "
-        "nhất."},
-    {"dev.switch_title",      "Switching modes",                     "Đổi chế độ"},
-    {"dev.switch_body",
-        "cmake -DJUSTINTIME_CORE=STABLE ..\ncmake -DJUSTINTIME_CORE=EXPERIMENTAL ..\n\n"
-        "Chosen at build time only - rebuild the app to switch.",
-        "cmake -DJUSTINTIME_CORE=STABLE ..\ncmake -DJUSTINTIME_CORE=EXPERIMENTAL ..\n\n"
-        "Chỉ chọn được lúc build - phải build lại app để đổi."},
 
     {NULL, NULL, NULL}
 };

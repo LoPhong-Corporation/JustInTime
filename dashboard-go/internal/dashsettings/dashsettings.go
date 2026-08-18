@@ -23,6 +23,16 @@ type Settings struct {
 	RAMThreshold  int    `json:"ram_threshold"`
 	DiskThreshold int    `json:"disk_threshold"`
 
+	// TimeFormat: "24h" (mặc định) hoặc "12h" - áp dụng cho thước giờ
+	// và tooltip trên Activity Timeline (mục Local Activity).
+	TimeFormat string `json:"time_format"`
+
+	// DefaultPeriod: khoảng thời gian mặc định khi mở tab Local
+	// Activity - "today" (mặc định), "yesterday", "this_week",
+	// "last_week". Không hỗ trợ "custom" làm mặc định (cần ngày cụ
+	// thể, không có ý nghĩa cố định).
+	DefaultPeriod string `json:"default_period"`
+
 	// Only ever sent to generativelanguage.googleapis.com when the
 	// user explicitly clicks "Generate Insights" — never used
 	// automatically, never sent anywhere else. Held in memory as
@@ -41,6 +51,8 @@ type onDiskSettings struct {
 	CPUThreshold  int    `json:"cpu_threshold"`
 	RAMThreshold  int    `json:"ram_threshold"`
 	DiskThreshold int    `json:"disk_threshold"`
+	TimeFormat    string `json:"time_format"`
+	DefaultPeriod string `json:"default_period"`
 
 	// Base64 of the DPAPI-protected key (Windows-user-scoped — see
 	// internal/secure). Empty/absent if no key has been set.
@@ -61,6 +73,8 @@ func Defaults() Settings {
 		CPUThreshold:  85,
 		RAMThreshold:  85,
 		DiskThreshold: 90,
+		TimeFormat:    "24h",
+		DefaultPeriod: "today",
 	}
 }
 
@@ -101,6 +115,12 @@ func Load() Settings {
 	}
 	if v, ok := data["disk_threshold"]; ok {
 		_ = json.Unmarshal(v, &out.DiskThreshold)
+	}
+	if v, ok := data["time_format"]; ok {
+		_ = json.Unmarshal(v, &out.TimeFormat)
+	}
+	if v, ok := data["default_period"]; ok {
+		_ = json.Unmarshal(v, &out.DefaultPeriod)
 	}
 
 	if v, ok := data["gemini_api_key_enc"]; ok {
@@ -144,6 +164,8 @@ func Save(s Settings) error {
 		CPUThreshold:  s.CPUThreshold,
 		RAMThreshold:  s.RAMThreshold,
 		DiskThreshold: s.DiskThreshold,
+		TimeFormat:    s.TimeFormat,
+		DefaultPeriod: s.DefaultPeriod,
 	}
 
 	if s.GeminiAPIKey != "" {

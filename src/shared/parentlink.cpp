@@ -1,7 +1,7 @@
 //
 // parentlink.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface extern "C" trong
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface extern "C" trong
 // parentlink.h). Logic giữ nguyên 100% - chỉ đổi cách dựng
 // path/body sang std::string.
 //

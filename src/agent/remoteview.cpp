@@ -1,8 +1,8 @@
 //
 // remoteview.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong remoteview.h, hành vi 100% giống bản STABLE (HTTP
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong remoteview.h), hành vi 100% giống bản C gốc trước khi chuyển đổi (HTTP
 // server cục bộ CHỈ ĐỌC, tắt mặc định, bảo vệ bằng token). Đổi cách
 // viết:
 //   - std::string cho phần dựng JSON response thay vì snprintf vào

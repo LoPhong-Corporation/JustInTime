@@ -1,9 +1,8 @@
 # JustInTime 
 
-> A lightweight native Windows activity monitoring agent written in C, C++, Go.
+> A lightweight native Windows activity monitoring agent written in C++ and Go.
 
 ![Platform](https://img.shields.io/badge/Platform-Windows-blue)
-![Language](https://img.shields.io/badge/Language-C-success)
 ![Language](https://img.shields.io/badge/Language-C++-success)
 ![Language](https://img.shields.io/badge/Language-Go-success)
 ![Compiler](https://img.shields.io/badge/Compiler-MSVC-purple)
@@ -163,13 +162,6 @@ cmake ..
 
 cmake --build .
 ```
-And Python with Flask package, Psutil package (Recommend Python 3.13)
-```bash
-pip install flask psutil
-```
-
-**Note: In the future, the Python Dashboard will be replaced by Go Dashboard for performance
----
 
 
 # Documentation
@@ -204,6 +196,3 @@ See the [LICENSE](LICENSE) file for more information.
 
 
 **Made with ❤️ by LoPhong Corporation**
-
-
-After 1.0.1, we stop support for Python dashboard and move to Go dashboard. 

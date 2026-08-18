@@ -44,8 +44,7 @@ public:
         PageParentLink,   // "Monitored By" - chỉ hiện khi role = CHILD
         PageFamily,       // "Family"       - chỉ hiện khi role = PARENT
         PageAdvanced,     // Supabase setup
-        PageAbout,
-        PageDevelopment   // build info: chế độ core Stable/Experimental...
+        PageAbout
     };
 
     explicit ControlPanelWindow(QWidget *parent = nullptr);
@@ -105,7 +104,6 @@ private slots:
 private:
     void buildOverviewPage();
     void buildAboutPage();
-    void buildDevelopmentPage();
     void applyStylesheet();
     void refreshSidebarVisibility();
     void refreshOverview();
@@ -146,5 +144,4 @@ private:
     int m_rowFamily     = -1;
     int m_rowAdvanced   = -1;
     int m_rowAbout      = -1;
-    int m_rowDevelopment = -1;
 };

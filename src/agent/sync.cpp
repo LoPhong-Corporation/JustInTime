@@ -1,8 +1,8 @@
 //
 // sync.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong sync.h, hành vi 100% giống bản STABLE. File này
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong sync.h), hành vi 100% giống bản C gốc trước khi chuyển đổi. File này
 // vốn đã đơn giản (1 vòng lặp gọi các hàm khác) - không có gì để
 // dùng RAII/std::string, chỉ đổi văn phong nhẹ (nullptr, kiểu dữ
 // liệu rõ ràng hơn) để đồng bộ với các module .cpp khác.

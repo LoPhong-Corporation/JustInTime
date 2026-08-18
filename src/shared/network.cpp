@@ -1,12 +1,12 @@
 //
 // network.cpp
 //
-// CHUYỂN TỪ C SANG C++ (bản EXPERIMENTAL) - giữ nguyên interface
-// extern "C" trong network.h, hành vi 100% giống bản STABLE (gửi
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
+// extern "C" trong network.h), hành vi 100% giống bản C gốc trước khi chuyển đổi (gửi
 // qua Edge Function "sync-activity", tự refresh token 1 lần nếu gặp
 // 401). Đổi cách viết:
 //   - RAII cho HINTERNET (dùng lại ý tưởng từ
-//     src/shared/experimental/restclient.cpp) - bản C cũ có 3 tầng
+//     src/shared/restclient.cpp) - bản C cũ có 3 tầng
 //     if lồng nhau (hSession/hConnect/hRequest) để đóng handle đúng
 //     thứ tự, dễ quên nếu sửa thêm nhánh mới.
 //   - std::string cho phần build JSON body.

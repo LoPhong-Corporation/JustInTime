@@ -1,15 +1,26 @@
 //
-// jsonutil.c
+// jsonutil.cpp
 //
-// Chế độ STABLE (C core). Xem src/shared/experimental/jsonutil.cpp cho
-// bản C++ tương đương (cùng interface jsonutil.h).
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface extern "C" trong
+// jsonutil.h). Đây KHÔNG phải parser JSON đầy đủ - vẫn chỉ là bộ
+// tiện ích tối giản để trích 1 vài field cụ thể từ response PostgREST
+// (mọi caller đều biết trước hình dạng JSON họ nhận), y hệt logic
+// bản C cũ, chỉ đổi cách hiện thực bên trong:
+//   - find_value_pos() dùng std::string để build pattern tìm kiếm
+//     thay vì buffer "char pattern[160]" cấp phát tay - bản cũ sẽ
+//     tràn bộ đệm (UB) nếu ai đó truyền "key" dài hơn ~157 ký tự;
+//     std::string không có giới hạn cứng đó.
+//   - Còn lại giữ nguyên thuật toán quét ký tự thủ công (đúng là
+//     cách hợp lý nhất cho việc trích xuất đơn giản này - không đáng
+//     để kéo vào 1 thư viện JSON đầy đủ chỉ để làm việc nhỏ).
 //
 
 #include "jsonutil.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <string>
 
 void json_escape(
     const char* input,
@@ -29,8 +40,12 @@ void json_escape(
 
     for (size_t i = 0; input[i] != '\0'; i++)
     {
-        unsigned char c = (unsigned char)input[i];
+        unsigned char c = static_cast<unsigned char>(input[i]);
 
+        /*
+         * Chừa ít nhất 7 ký tự trống để có thể
+         * ghi an toàn chuỗi \u00XX dài nhất.
+         */
         if (j + 7 >= output_size)
             break;
 
@@ -64,16 +79,16 @@ void json_escape(
             default:
                 if (c < 0x20)
                 {
-                    j += (size_t)snprintf(
+                    j += static_cast<size_t>(snprintf(
                         output + j,
                         output_size - j,
                         "\\u%04x",
                         c
-                    );
+                    ));
                 }
                 else
                 {
-                    output[j++] = (char)c;
+                    output[j++] = static_cast<char>(c);
                 }
         }
     }
@@ -81,29 +96,30 @@ void json_escape(
     output[j] = '\0';
 }
 
+namespace {
+
 /*
  * Tìm vị trí bắt đầu giá trị (sau dấu ':', bỏ khoảng trắng)
- * ứng với "key" trong json. Trả về NULL nếu không tìm thấy key.
+ * ứng với "key" trong json. Trả về nullptr nếu không tìm thấy key.
  */
-static const char* find_value_pos(
+const char* find_value_pos(
     const char* json,
     const char* key)
 {
     if (!json || !key)
-        return NULL;
+        return nullptr;
 
-    char pattern[160];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    const std::string pattern = std::string("\"") + key + "\"";
 
-    const char* pos = strstr(json, pattern);
-
-    if (!pos)
-        return NULL;
-
-    pos = strchr(pos + strlen(pattern), ':');
+    const char* pos = strstr(json, pattern.c_str());
 
     if (!pos)
-        return NULL;
+        return nullptr;
+
+    pos = strchr(pos + pattern.size(), ':');
+
+    if (!pos)
+        return nullptr;
 
     pos++;
 
@@ -112,6 +128,8 @@ static const char* find_value_pos(
 
     return pos;
 }
+
+} // namespace
 
 int json_extract_string(
     const char* json,
@@ -197,7 +215,7 @@ int json_extract_long(
     if (found_null)
         *found_null = 0;
 
-    *out_value = strtol(pos, NULL, 10);
+    *out_value = strtol(pos, nullptr, 10);
 
     return 1;
 }
@@ -212,6 +230,10 @@ int json_array_next(
 
     const char* p = *cursor;
 
+    /*
+     * Bỏ qua khoảng trắng, dấu '[' đầu mảng, và dấu ','
+     * ngăn cách giữa 2 phần tử.
+     */
     while (
         *p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' ||
         *p == '[' || *p == ','
@@ -220,10 +242,18 @@ int json_array_next(
 
     if (*p != '{')
     {
+        /*
+         * Đã hết mảng (gặp ']') hoặc chuỗi rỗng/không hợp lệ.
+         */
         *cursor = p;
         return 0;
     }
 
+    /*
+     * Đếm ngoặc lồng nhau (bỏ qua { } nằm bên trong chuỗi
+     * string, để không đếm nhầm nếu 1 giá trị string chứa
+     * ký tự '{'/'}').
+     */
     int depth = 0;
     int in_string = 0;
     const char* start = p;
@@ -271,7 +301,7 @@ int json_array_next(
         p++;
     }
 
-    size_t len = (size_t)(p - start);
+    size_t len = static_cast<size_t>(p - start);
 
     if (len >= obj_out_size)
         len = obj_out_size - 1;
