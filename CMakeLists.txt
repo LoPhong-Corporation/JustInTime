@@ -113,20 +113,13 @@ target_link_libraries(
 )
 
 # ------------------------------------------------------------------
-# Đưa cả 2 dashboard (Python + Go) ra cạnh JustInTime.exe sau khi
+# Đưa cả dashboard (Go) ra cạnh JustInTime.exe sau khi
 # build, để tray menu "Dashboards" tìm thấy chúng ngay mà không phải
 # dò ngược cây thư mục (xem findResourceDir() trong trayicon.cpp).
 # Không lỗi nếu dashboard-go/dashboard.exe chưa được build (go build
 # ./cmd/dashboard) - chỉ là mục "Open Local Dashboard (Go)" sẽ báo
 # không tìm thấy cho tới khi bạn build nó.
 # ------------------------------------------------------------------
-
-add_custom_command(TARGET JustInTime POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_SOURCE_DIR}/dashboard"
-                "$<TARGET_FILE_DIR:JustInTime>/dashboard"
-        COMMENT "Copying Python dashboard next to JustInTime.exe"
-)
 
 add_custom_command(TARGET JustInTime POST_BUILD
         COMMAND ${CMAKE_COMMAND}
