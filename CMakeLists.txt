@@ -13,7 +13,7 @@ set(CMAKE_AUTORCC ON)
 # thư mục cài Qt, ví dụ:
 #   -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64" 
 set(Qt6_DIR
-    "C:/Qt/6.11.1/msvc2022_64/lib/cmake/Qt6"
+    "C:/Qt/6.11.2/msvc2022_64/lib/cmake/Qt6"
 )
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
