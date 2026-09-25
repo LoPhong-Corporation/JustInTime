@@ -17,6 +17,7 @@
 
 #include "auth.h"
 #include "settings.h"
+#include "paths.h"
 #include "jsonutil.h"
 #include "error_codes.h"
 
@@ -182,11 +183,9 @@ bool doAuthPost(
     return true;
 }
 
-std::string sessionFilePath()
+std::filesystem::path sessionFilePath()
 {
-    char dir[MAX_PATH];
-    settings_get_config_dir(dir, sizeof(dir));
-    return std::string(dir) + "\\session.dat";
+    return jit::configFile(L"session.dat");
 }
 
 /*
@@ -212,12 +211,15 @@ bool saveSessionToDisk(const AuthSession& s)
 
     LocalAllocGuard guard(outBlob.pbData);
 
-    std::ofstream f(sessionFilePath(), std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!f)
-        return false;
+    // Atomic: 1 lần ghi dở làm hỏng session.dat = người dùng bị đăng xuất
+    // ở lần khởi động sau, dù refresh_token vẫn còn hạn.
+    const bool ok = jit::writeFileAtomic(
+        sessionFilePath(),
+        std::string_view(reinterpret_cast<const char*>(outBlob.pbData), outBlob.cbData));
 
-    f.write(reinterpret_cast<const char*>(outBlob.pbData), outBlob.cbData);
-    return f.good();
+    // Không để access/refresh token lại trên stack.
+    SecureZeroMemory(buf, sizeof(buf));
+    return ok;
 }
 
 bool loadSessionFromDisk(AuthSession* s)
@@ -360,7 +362,7 @@ void auth_logout(void)
         memset(&g_session, 0, sizeof(g_session));
     }
 
-    DeleteFileA(sessionFilePath().c_str());
+    DeleteFileW(sessionFilePath().c_str());
 }
 
 int auth_refresh_session(void)

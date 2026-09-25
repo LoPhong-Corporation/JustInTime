@@ -36,6 +36,7 @@
 
 #include "device.h"
 #include "settings.h"
+#include "paths.h"
 
 #include <windows.h>
 #include <wincrypt.h>
@@ -62,14 +63,9 @@ std::string g_cachedId;
 std::string g_cachedLabel;
 bool        g_cacheLoaded = false;
 
-std::string deviceFilePath()
+std::filesystem::path deviceFilePath()
 {
-    char dir[MAX_PATH] = {0};
-
-    if (!settings_get_config_dir(dir, sizeof(dir)))
-        return "";
-
-    return std::string(dir) + "\\device.id";
+    return jit::configFile(L"device.id");
 }
 
 /*
@@ -115,17 +111,10 @@ std::string trimNewline(std::string s)
     return s;
 }
 
-bool writeDeviceFile(const std::string& path, const std::string& id, const std::string& label)
+bool writeDeviceFile(const std::filesystem::path& path, const std::string& id, const std::string& label)
 {
-    if (path.empty())
-        return false;
-
-    std::ofstream f(path, std::ios::out | std::ios::trunc);
-    if (!f)
-        return false;
-
-    f << id << "\n" << label << "\n";
-    return true;
+    // Atomic: device_id là khoá đồng bộ, mất/hỏng file = máy bị coi là thiết bị mới.
+    return jit::writeFileAtomic(path, id + "\n" + label + "\n");
 }
 
 /*
@@ -139,7 +128,7 @@ void loadOrCreate()
     if (g_cacheLoaded)
         return;
 
-    const std::string path = deviceFilePath();
+    const std::filesystem::path path = deviceFilePath();
     g_cachedId.clear();
     g_cachedLabel.clear();
 
@@ -228,6 +217,5 @@ int device_set_label(
 
     g_cachedLabel = label ? label : "";
 
-    const std::string path = deviceFilePath();
-    return writeDeviceFile(path, g_cachedId, g_cachedLabel) ? 1 : 0;
+    return writeDeviceFile(deviceFilePath(), g_cachedId, g_cachedLabel) ? 1 : 0;
 }

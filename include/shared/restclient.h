@@ -46,6 +46,20 @@ int restclient_call(
     DWORD* status_out
 );
 
+/*
+ * Gọi khi 1 request bị Supabase trả 401 (access_token hết hạn - mặc định
+ * chỉ sống ~1 giờ). used_token là access_token đã dùng cho request thất bại.
+ *
+ *   - Nếu session hiện tại ĐÃ có token khác (1 luồng khác vừa refresh xong)
+ *     thì không refresh lần nữa (refresh_token của Supabase xoay vòng, gọi
+ *     đồng thời từ 2 luồng có thể làm 1 bên bị từ chối -> đăng xuất oan).
+ *   - Ngược lại gọi auth_refresh_session().
+ *
+ * Trả về 1 nếu giờ đã có token mới để thử lại, 0 nếu không.
+ * restclient_call() tự gọi hàm này; network.cpp cũng dùng chung.
+ */
+int restclient_refresh_if_stale(const char* used_token);
+
 
 #ifdef __cplusplus
 }

@@ -18,9 +18,11 @@
 
 #include "database.h"
 #include "device.h"
-#include "jsonutil.h"
+#include "paths.h"
+#include "strutil.h"
 #include "settings.h"
 #include "error_codes.h"
+#include "log.h"
 
 #include "sqlite/sqlite3.h"
 
@@ -64,19 +66,65 @@ private:
     sqlite3_stmt* m_stmt = nullptr;
 };
 
-void wideToUtf8(const wchar_t* wide, char* utf8, int utf8Size)
-{
-    WideCharToMultiByte(CP_UTF8, 0, wide, -1, utf8, utf8Size, NULL, NULL);
-}
-
+/*
+ * UTF-8 -> wchar_t[wideSize], LUÔN kết thúc bằng '\0' và cắt bớt nếu quá
+ * dài. Bản cũ gọi thẳng MultiByteToWideChar: khi chuỗi dài hơn buffer nó
+ * trả về 0 và KHÔNG ghi '\0' => các nơi dùng wcslen()/wprintf() sau đó
+ * đọc lố buffer.
+ */
 void utf8ToWide(const char* utf8, wchar_t* wide, int wideSize)
 {
-    if (!utf8)
-    {
-        wide[0] = L'\0';
+    if (!wide || wideSize <= 0)
         return;
+
+    wide[0] = L'\0';
+
+    if (!utf8)
+        return;
+
+    const std::wstring w = jit::utf8ToWide(utf8);
+    const size_t n = w.size() < static_cast<size_t>(wideSize - 1) ? w.size() : static_cast<size_t>(wideSize - 1);
+
+    memcpy(wide, w.data(), n * sizeof(wchar_t));
+    wide[n] = L'\0';
+}
+
+const char* columnText(sqlite3_stmt* stmt, int col)
+{
+    const char* t = reinterpret_cast<const char*>(sqlite3_column_text(stmt, col));
+    return t ? t : "";
+}
+
+/* Chạy 1 câu lệnh không có kết quả; lỗi được ghi log nhưng không dừng app. */
+bool execSql(const char* sql)
+{
+    char* err = nullptr;
+    const int rc = sqlite3_exec(g_db, sql, nullptr, nullptr, &err);
+
+    if (rc != SQLITE_OK)
+    {
+        JIT_LOG(L"[DB] SQL loi (%hs): %hs\n", sql, err ? err : "?");
+        sqlite3_free(err);
+        return false;
     }
-    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide, wideSize);
+
+    return true;
+}
+
+bool tableHasColumn(const char* table, const char* column)
+{
+    const std::string sql = std::string("PRAGMA table_info(") + table + ");";
+    Stmt stmt(g_db, sql.c_str());
+    if (!stmt.ok())
+        return false;
+
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+        if (strcmp(columnText(stmt, 1), column) == 0)
+            return true;
+    }
+
+    return false;
 }
 
 /* 00:00 giờ địa phương hôm nay, dùng chung cho mọi truy vấn "hôm nay". */
@@ -95,21 +143,46 @@ time_t todayStart()
 
 int db_init(void)
 {
-    char dir[MAX_PATH];
-    char dbPath[MAX_PATH];
+    const std::filesystem::path dbFile = jit::configFile(L"justintime.db");
+    const std::string dbPath = dbFile.empty() ? std::string("justintime.db")  /* Fallback hiếm khi xảy ra */
+                                              : jit::wideToUtf8(dbFile.wstring());
 
-    if (settings_get_config_dir(dir, sizeof(dir)))
-        snprintf(dbPath, sizeof(dbPath), "%s\\justintime.db", dir);
-    else
-        snprintf(dbPath, sizeof(dbPath), "justintime.db"); /* Fallback hiếm khi xảy ra */
-
-    int rc = sqlite3_open(dbPath, &g_db);
+    /*
+     * FULLMUTEX: kết nối này được dùng từ nhiều luồng (worker ghi, GUI
+     * đọc tổng kết, remote view đọc, luồng cloud đánh dấu đã sync) - buộc
+     * chế độ "serialized" bất kể sqlite3.c được biên dịch với
+     * SQLITE_THREADSAFE gì.
+     */
+    int rc = sqlite3_open_v2(
+        dbPath.c_str(), &g_db,
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+        nullptr);
 
     if (rc != SQLITE_OK)
     {
-        wprintf(L"[%hs] Failed to open database\n", ERR_DB_OPEN_FAIL);
+        JIT_LOG(L"[%hs] Failed to open database\n", ERR_DB_OPEN_FAIL);
+        sqlite3_close(g_db);
+        g_db = nullptr;
         return 0;
     }
+
+    /*
+     * QUAN TRỌNG - cùng file DB này được mở bởi 2 tiến trình: agent (ghi)
+     * và dashboard-go (đọc). Với journal mặc định (DELETE), 1 lần đọc của
+     * dashboard giữ khoá SHARED và làm câu INSERT của agent lỗi
+     * SQLITE_BUSY NGAY LẬP TỨC (agent không đặt busy_timeout) - record
+     * hoạt động bị MẤT vì db_insert_activity() chỉ trả về 0, không ai thử lại.
+     *   - busy_timeout: chờ tối đa 5s thay vì lỗi ngay.
+     *   - WAL: người đọc không chặn người ghi (và ngược lại).
+     *   - synchronous=NORMAL: an toàn với WAL (chỉ có thể mất vài giao dịch
+     *     cuối nếu mất điện đột ngột, không hỏng DB) và tránh fsync mỗi lần
+     *     insert.
+     */
+    sqlite3_busy_timeout(g_db, 5000);
+    execSql("PRAGMA journal_mode=WAL;");
+    execSql("PRAGMA synchronous=NORMAL;");
+    execSql("PRAGMA temp_store=MEMORY;");
+    execSql("PRAGMA journal_size_limit=4194304;");
 
     const char* sql =
         "CREATE TABLE IF NOT EXISTS activity_logs ("
@@ -124,25 +197,46 @@ int db_init(void)
         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
         ");";
 
-    char* error = nullptr;
-    rc = sqlite3_exec(g_db, sql, nullptr, nullptr, &error);
-
-    if (rc != SQLITE_OK)
+    if (!execSql(sql))
     {
-        wprintf(L"[%hs] Create table failed: %hs\n", ERR_DB_CREATE_TABLE, error);
-        sqlite3_free(error);
+        JIT_LOG(L"[%hs] Create table failed\n", ERR_DB_CREATE_TABLE);
         return 0;
     }
 
-    wprintf(L"Database initialized\n");
+    JIT_LOG(L"Database initialized\n");
 
     /*
-     * Migration: thêm cột cho Retry Queue nếu chưa có (ALTER TABLE
-     * ADD COLUMN lỗi vô hại nếu cột đã tồn tại, nên cố tình bỏ qua
-     * kết quả trả về).
+     * Migration: thêm cột cho Retry Queue nếu chưa có. Trước đây chạy
+     * ALTER TABLE mù và bỏ qua lỗi "duplicate column" mỗi lần khởi động;
+     * giờ kiểm tra cột trước nên lỗi thật sự (đĩa đầy, DB hỏng...) không bị
+     * nuốt cùng với lỗi vô hại kia.
      */
-    sqlite3_exec(g_db, "ALTER TABLE activity_logs ADD COLUMN retry_count INTEGER DEFAULT 0;", nullptr, nullptr, nullptr);
-    sqlite3_exec(g_db, "ALTER TABLE activity_logs ADD COLUMN next_retry_at INTEGER DEFAULT 0;", nullptr, nullptr, nullptr);
+    if (!tableHasColumn("activity_logs", "retry_count"))
+        execSql("ALTER TABLE activity_logs ADD COLUMN retry_count INTEGER DEFAULT 0;");
+
+    if (!tableHasColumn("activity_logs", "next_retry_at"))
+        execSql("ALTER TABLE activity_logs ADD COLUMN next_retry_at INTEGER DEFAULT 0;");
+
+    /*
+     * Index cho các truy vấn định kỳ (phải tạo SAU migration vì
+     * next_retry_at có thể mới được thêm ở trên):
+     *   - idx_activity_unsynced : hàng đợi sync + db_count_unsynced().
+     *     Là partial index nên chỉ chứa các dòng chưa sync (thường rất ít)
+     *     dù bảng giữ 30 ngày dữ liệu.
+     *   - idx_activity_proc_start : db_get_today_seconds() - chạy mỗi vài
+     *     giây để kiểm tra giới hạn app - và subquery "tiêu đề gần nhất".
+     *   - idx_activity_start_proc : tổng kết theo app trong ngày.
+     *   - idx_activity_synced_created : db_delete_old_records().
+     * Các index proc/start là covering (có cả duration_seconds) nên không
+     * phải đọc bảng chính.
+     */
+    execSql("CREATE INDEX IF NOT EXISTS idx_activity_unsynced ON activity_logs(next_retry_at) WHERE synced = 0;");
+    execSql("CREATE INDEX IF NOT EXISTS idx_activity_proc_start ON activity_logs(process_name, start_time, duration_seconds);");
+    execSql("CREATE INDEX IF NOT EXISTS idx_activity_start_proc ON activity_logs(start_time, process_name, duration_seconds);");
+    execSql("CREATE INDEX IF NOT EXISTS idx_activity_synced_created ON activity_logs(created_at) WHERE synced = 1;");
+
+    // Cập nhật thống kê cho query planner (rẻ: chỉ phân tích khi cần).
+    execSql("PRAGMA optimize=0x10002;");
 
     return 1;
 }
@@ -155,10 +249,10 @@ int db_insert_activity(const ActivityRecord* record)
     char deviceId[128] = {0};
     get_device_id(deviceId, sizeof(deviceId));
 
-    char processUtf8[512] = {0};
-    char titleUtf8[2048] = {0};
-    wideToUtf8(record->process_name, processUtf8, sizeof(processUtf8));
-    wideToUtf8(record->window_title, titleUtf8, sizeof(titleUtf8));
+    // std::string: không còn buffer 512 byte cố định (tên file toàn ký tự
+    // CJK dài có thể vượt 512 byte UTF-8 => trước đây thành chuỗi rỗng).
+    const std::string processUtf8 = jit::wideToUtf8(record->process_name);
+    const std::string titleUtf8 = jit::wideToUtf8(record->window_title);
 
     const char* sql =
         "INSERT INTO activity_logs ("
@@ -168,13 +262,13 @@ int db_insert_activity(const ActivityRecord* record)
     Stmt stmt(g_db, sql);
     if (!stmt.ok())
     {
-        wprintf(L"[%hs] Prepare failed: %hs\n", ERR_DB_INSERT_FAIL, sqlite3_errmsg(g_db));
+        JIT_LOG(L"[%hs] Prepare failed: %hs\n", ERR_DB_INSERT_FAIL, sqlite3_errmsg(g_db));
         return 0;
     }
 
     sqlite3_bind_text(stmt, 1, deviceId, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, processUtf8, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, titleUtf8, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, processUtf8.c_str(), static_cast<int>(processUtf8.size()), SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, titleUtf8.c_str(), static_cast<int>(titleUtf8.size()), SQLITE_TRANSIENT);
     sqlite3_bind_int64(stmt, 4, record->duration_seconds);
     sqlite3_bind_int64(stmt, 5, static_cast<sqlite3_int64>(record->start_time));
     sqlite3_bind_int64(stmt, 6, static_cast<sqlite3_int64>(record->end_time));
@@ -184,11 +278,11 @@ int db_insert_activity(const ActivityRecord* record)
 
     if (rc != SQLITE_DONE)
     {
-        wprintf(L"[%hs] Insert failed: %hs\n", ERR_DB_INSERT_FAIL, sqlite3_errmsg(g_db));
+        JIT_LOG(L"[%hs] Insert failed: %hs\n", ERR_DB_INSERT_FAIL, sqlite3_errmsg(g_db));
         return 0;
     }
 
-    wprintf(L"Activity saved\n");
+    JIT_LOG(L"Activity saved\n");
     return 1;
 }
 
@@ -348,10 +442,9 @@ long db_get_today_seconds(const wchar_t* process_name)
     if (!stmt.ok())
         return 0;
 
-    char processUtf8[512] = {0};
-    wideToUtf8(process_name, processUtf8, sizeof(processUtf8));
+    const std::string processUtf8 = jit::wideToUtf8(process_name);
 
-    sqlite3_bind_text(stmt, 1, processUtf8, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 1, processUtf8.c_str(), static_cast<int>(processUtf8.size()), SQLITE_TRANSIENT);
     sqlite3_bind_int64(stmt, 2, static_cast<sqlite3_int64>(dayStart));
 
     long total = 0;
@@ -369,10 +462,15 @@ long db_get_today_seconds(const wchar_t* process_name)
  */
 void db_print_daily_summary(void)
 {
+    // Chỉ để in ra console debug - không tốn 1 truy vấn DB (mỗi 5 phút)
+    // chỉ để ghi vào 1 console đang bị ẩn.
+    if (!jit_log_enabled())
+        return;
+
     wchar_t buffer[4096] = {0};
     db_build_daily_summary_text(buffer, 4096);
 
-    wprintf(
+    JIT_LOG(
         L"\n"
         L"========== TONG KET HOM NAY (theo app) ==========\n"
         L"%ls"
@@ -385,9 +483,15 @@ void db_close(void)
 {
     if (g_db)
     {
+        execSql("PRAGMA optimize;");
         sqlite3_close(g_db);
         g_db = nullptr;
     }
+}
+
+long long db_change_counter(void)
+{
+    return g_db ? static_cast<long long>(sqlite3_total_changes64(g_db)) : 0;
 }
 
 void db_print_unsynced(void)
@@ -414,7 +518,7 @@ void db_print_unsynced(void)
 
         int duration = sqlite3_column_int(stmt, 2);
 
-        wprintf(L"[UNSYNCED] id=%d process=%ls duration=%d\n", id, process, duration);
+        JIT_LOG(L"[UNSYNCED] id=%d process=%ls duration=%d\n", id, process, duration);
     }
 }
 
@@ -428,7 +532,7 @@ int db_get_unsynced_records(SyncRecord* records, int max_records)
         "FROM activity_logs "
         "WHERE synced = 0 "
         "AND next_retry_at <= CAST(strftime('%s','now') AS INTEGER) "
-        "ORDER BY next_retry_at ASC "
+        "ORDER BY next_retry_at ASC, id ASC "
         "LIMIT ?;";
 
     Stmt stmt(g_db, sql);
@@ -445,13 +549,12 @@ int db_get_unsynced_records(SyncRecord* records, int max_records)
 
         rec->id = sqlite3_column_int(stmt, 0);
 
-        snprintf(
-            rec->device_id, sizeof(rec->device_id), "%s",
-            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))
-        );
+        // columnText(): sqlite3_column_text() có thể trả NULL, và truyền
+        // NULL cho "%s" là hành vi không xác định.
+        snprintf(rec->device_id, sizeof(rec->device_id), "%s", columnText(stmt, 1));
 
-        utf8ToWide(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)), rec->process_name, 512);
-        utf8ToWide(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)), rec->window_title, 2048);
+        utf8ToWide(columnText(stmt, 2), rec->process_name, 512);
+        utf8ToWide(columnText(stmt, 3), rec->window_title, 2048);
 
         rec->duration_seconds = sqlite3_column_int64(stmt, 4);
         rec->start_time = sqlite3_column_int64(stmt, 5);
@@ -465,9 +568,10 @@ int db_get_unsynced_records(SyncRecord* records, int max_records)
 
 int db_mark_synced(int id)
 {
-    const char* sql = "UPDATE activity_logs SET synced = 1 WHERE id = ?;";
+    if (!g_db)
+        return 0;
 
-    Stmt stmt(g_db, sql);
+    Stmt stmt(g_db, "UPDATE activity_logs SET synced = 1 WHERE id = ?;");
     if (!stmt.ok())
         return 0;
 
@@ -476,11 +580,49 @@ int db_mark_synced(int id)
     return sqlite3_step(stmt) == SQLITE_DONE;
 }
 
+int db_mark_synced_batch(const int* ids, int count)
+{
+    if (!g_db || !ids || count <= 0)
+        return 0;
+
+    /*
+     * 1 câu UPDATE ... WHERE id IN (...) là atomic và chỉ tốn 1 lần commit.
+     * Chỉ nối SỐ NGUYÊN vào câu lệnh (không có chuỗi người dùng nào) nên
+     * không có rủi ro SQL injection. Chia đoạn 500 id để câu SQL luôn ngắn.
+     */
+    constexpr int kChunk = 500;
+    int ok = 1;
+
+    for (int offset = 0; offset < count; offset += kChunk)
+    {
+        const int n = (count - offset) < kChunk ? (count - offset) : kChunk;
+
+        std::string sql = "UPDATE activity_logs SET synced = 1 WHERE id IN (";
+        for (int i = 0; i < n; i++)
+        {
+            if (i > 0)
+                sql += ',';
+            sql += std::to_string(ids[offset + i]);
+        }
+        sql += ");";
+
+        if (!execSql(sql.c_str()))
+            ok = 0;
+    }
+
+    return ok;
+}
+
 /*
  * Đánh dấu 1 record vừa gửi lên cloud thất bại: tăng retry_count và
- * tính lại next_retry_at theo kiểu exponential backoff (2^retry_count
- * * base, giới hạn bởi max), để không spam server liên tục khi mất
- * mạng dài ngày, đồng thời tự thử lại nhanh hơn khi vừa lỗi.
+ * tính lại next_retry_at theo kiểu exponential backoff (base * 2^retry_count,
+ * giới hạn bởi max), để không spam server liên tục khi 1 record cứ bị từ
+ * chối, đồng thời tự thử lại nhanh hơn khi vừa lỗi.
+ *
+ * Trước đây làm bằng SELECT retry_count -> tính trong C++ -> UPDATE (2 câu
+ * lệnh, và không atomic). Giờ là 1 câu UPDATE duy nhất; công thức giữ
+ * nguyên (mũ giới hạn ở 20 để tránh tràn số) - đã đối chiếu với công thức
+ * C++ cũ trên nhiều cặp (retry_count, base, max).
  */
 int db_mark_sync_failed(int id)
 {
@@ -490,49 +632,29 @@ int db_mark_sync_failed(int id)
     AppSettings s;
     settings_get(&s);
 
-    int retryCount = 0;
-    {
-        Stmt selectStmt(g_db, "SELECT retry_count FROM activity_logs WHERE id = ?;");
-        if (selectStmt.ok())
-        {
-            sqlite3_bind_int(selectStmt, 1, id);
-            if (sqlite3_step(selectStmt) == SQLITE_ROW)
-                retryCount = sqlite3_column_int(selectStmt, 0);
-        }
-    }
-
-    retryCount++;
-
-    /*
-     * backoff = base * 2^retry_count, giới hạn bởi max. Giới hạn
-     * retry_count dùng để tính lũy thừa ở 20 để tránh tràn số nếu
-     * retry_count quá lớn theo thời gian.
-     */
-    int expCap = retryCount > 20 ? 20 : retryCount;
-    long long backoff = static_cast<long long>(s.retry_backoff_base_sec) << expCap;
-
-    if (backoff > s.retry_backoff_max_sec || backoff <= 0)
-        backoff = s.retry_backoff_max_sec;
-
-    const char* updateSql =
+    const char* sql =
         "UPDATE activity_logs "
-        "SET retry_count = ?, "
-        "next_retry_at = CAST(strftime('%s','now') AS INTEGER) + ? "
-        "WHERE id = ?;";
+        "SET retry_count = COALESCE(retry_count, 0) + 1, "
+        "    next_retry_at = CAST(strftime('%s','now') AS INTEGER) "
+        "                    + MAX(1, MIN(?1, ?2 << MIN(COALESCE(retry_count, 0) + 1, 20))) "
+        "WHERE id = ?3;";
 
-    Stmt updateStmt(g_db, updateSql);
-    if (!updateStmt.ok())
+    Stmt stmt(g_db, sql);
+    if (!stmt.ok())
         return 0;
 
-    sqlite3_bind_int(updateStmt, 1, retryCount);
-    sqlite3_bind_int64(updateStmt, 2, backoff);
-    sqlite3_bind_int(updateStmt, 3, id);
+    sqlite3_bind_int64(stmt, 1, s.retry_backoff_max_sec);
+    sqlite3_bind_int64(stmt, 2, s.retry_backoff_base_sec);
+    sqlite3_bind_int(stmt, 3, id);
 
-    return sqlite3_step(updateStmt) == SQLITE_DONE;
+    return sqlite3_step(stmt) == SQLITE_DONE;
 }
 
 int db_count_unsynced(void)
 {
+    if (!g_db)
+        return 0;
+
     const char* sql = "SELECT COUNT(*) FROM activity_logs WHERE synced = 0;";
 
     Stmt stmt(g_db, sql);
@@ -548,6 +670,9 @@ int db_count_unsynced(void)
 
 int db_delete_old_records(int days)
 {
+    if (!g_db)
+        return 0;
+
     /*
      * QUAN TRỌNG: chỉ xóa các bản ghi ĐÃ synced=1. Không bao giờ xóa
      * dữ liệu chưa kịp đồng bộ lên Supabase, để tránh mất dữ liệu
@@ -574,15 +699,34 @@ int db_delete_old_records(int days)
  * Xuất TOÀN BỘ bảng activity_logs (kể cả đã sync lẫn chưa sync) ra
  * một file JSON, dùng cho mục đích backup cục bộ, độc lập với việc
  * đồng bộ lên Supabase.
+ *
+ * So với bản cũ:
+ *   - Escape bằng std::string (jit::jsonEscape) thay vì 4 buffer cố định
+ *     - buffer title 8192 byte có thể cắt cụt ở trường hợp xấu nhất
+ *     (json_escape nở tối đa 6 lần).
+ *   - Có buffer ghi 64KB (mặc định của stdio là 4KB).
+ *   - Ghi ra "<file>.tmp" rồi MoveFileEx: crash giữa chừng không để lại
+ *     file backup cụt.
+ *   - Đường dẫn UTF-8 -> _wfopen (chạy đúng với tên thư mục Unicode).
+ *   - Dưới WAL, việc đọc toàn bảng ở đây không chặn việc insert của
+ *     luồng theo dõi.
  */
 int db_export_json(const char* filepath)
 {
     if (!g_db || !filepath)
         return 0;
 
-    FILE* f = fopen(filepath, "wb");
+    const std::wstring target = jit::utf8ToWide(filepath);
+    if (target.empty())
+        return 0;
+
+    const std::wstring tmp = target + L".tmp";
+
+    FILE* f = _wfopen(tmp.c_str(), L"wb");
     if (!f)
         return 0;
+
+    setvbuf(f, nullptr, _IOFBF, 1 << 16);
 
     const char* sql =
         "SELECT id, device_id, process_name, window_title, "
@@ -595,52 +739,45 @@ int db_export_json(const char* filepath)
     if (!stmt.ok())
     {
         fclose(f);
+        DeleteFileW(tmp.c_str());
         return 0;
     }
 
-    fprintf(f, "[\n");
+    fputs("[\n", f);
 
-    int first = 1;
+    bool first = true;
+    std::string row;
 
     while (sqlite3_step(stmt) == SQLITE_ROW)
     {
-        if (!first)
-            fprintf(f, ",\n");
-        first = 0;
+        row.clear();
+        row += first ? "  {" : ",\n  {";
+        first = false;
 
-        int id = sqlite3_column_int(stmt, 0);
-        const char* deviceId = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        const char* processName = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        const char* windowTitle = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        long duration = static_cast<long>(sqlite3_column_int64(stmt, 4));
-        long long startTime = sqlite3_column_int64(stmt, 5);
-        long long endTime = sqlite3_column_int64(stmt, 6);
-        int synced = sqlite3_column_int(stmt, 7);
-        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        row += "\"id\": " + std::to_string(sqlite3_column_int(stmt, 0));
+        row += ", \"device_id\": \"" + jit::jsonEscape(columnText(stmt, 1)) + "\"";
+        row += ", \"process_name\": \"" + jit::jsonEscape(columnText(stmt, 2)) + "\"";
+        row += ", \"window_title\": \"" + jit::jsonEscape(columnText(stmt, 3)) + "\"";
+        row += ", \"duration_seconds\": " + std::to_string(static_cast<long long>(sqlite3_column_int64(stmt, 4)));
+        row += ", \"start_time\": " + std::to_string(static_cast<long long>(sqlite3_column_int64(stmt, 5)));
+        row += ", \"end_time\": " + std::to_string(static_cast<long long>(sqlite3_column_int64(stmt, 6)));
+        row += ", \"synced\": " + std::to_string(sqlite3_column_int(stmt, 7));
+        row += ", \"created_at\": \"" + jit::jsonEscape(columnText(stmt, 8)) + "\"}";
 
-        char deviceEsc[256] = {0};
-        char processEsc[2048] = {0};
-        char titleEsc[8192] = {0};
-        char createdEsc[64] = {0};
-
-        json_escape(deviceId, deviceEsc, sizeof(deviceEsc));
-        json_escape(processName, processEsc, sizeof(processEsc));
-        json_escape(windowTitle, titleEsc, sizeof(titleEsc));
-        json_escape(createdAt, createdEsc, sizeof(createdEsc));
-
-        fprintf(
-            f,
-            "  {\"id\": %d, \"device_id\": \"%s\", "
-            "\"process_name\": \"%s\", \"window_title\": \"%s\", "
-            "\"duration_seconds\": %ld, \"start_time\": %lld, "
-            "\"end_time\": %lld, \"synced\": %d, "
-            "\"created_at\": \"%s\"}",
-            id, deviceEsc, processEsc, titleEsc, duration, startTime, endTime, synced, createdEsc
-        );
+        fwrite(row.data(), 1, row.size(), f);
     }
 
-    fprintf(f, "\n]\n");
+    fputs("\n]\n", f);
+
+    const bool wroteOk = (fflush(f) == 0) && (ferror(f) == 0);
     fclose(f);
+
+    if (!wroteOk ||
+        !MoveFileExW(tmp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        DeleteFileW(tmp.c_str());
+        return 0;
+    }
 
     return 1;
 }
@@ -650,16 +787,5 @@ int db_export_json(const char* filepath)
  */
 int db_mark_record_synced(int id)
 {
-    if (!g_db)
-        return 0;
-
-    const char* sql = "UPDATE activity_logs SET synced = 1 WHERE id = ?;";
-
-    Stmt stmt(g_db, sql);
-    if (!stmt.ok())
-        return 0;
-
-    sqlite3_bind_int(stmt, 1, id);
-
-    return sqlite3_step(stmt) == SQLITE_DONE;
+    return db_mark_synced(id);
 }

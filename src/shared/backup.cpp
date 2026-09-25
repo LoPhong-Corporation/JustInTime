@@ -16,58 +16,51 @@
 //   - RAII cho HANDLE tìm file (FindFirstFileA) - tự đóng khi ra
 //     khỏi scope.
 //
+// Đợt tối ưu sau đó:
+//   - Đường dẫn dùng std::filesystem (UTF-16), FindFirstFileA/FindHandle
+//     được thay bằng directory_iterator - chạy đúng với tên user Unicode.
+//   - Bỏ qua backup nếu DB không thay đổi kể từ lần backup trước.
+//   - File JSON được ghi ra file tạm rồi đổi tên (xem db_export_json), nên
+//     backup dở dang do crash không bao giờ chiếm 1 trong 14 chỗ giữ lại.
+//
 
 #include "backup.h"
 #include "database.h"
 #include "config.h"
 #include "settings.h"
+#include "paths.h"
+#include "strutil.h"
+#include "log.h"
 #include "error_codes.h"
 
 #include <windows.h>
 
 #include <cstdio>
-#include <cstring>
+#include <cwchar>
 #include <ctime>
-#include <string>
-#include <vector>
 #include <algorithm>
+#include <filesystem>
+#include <string>
+#include <system_error>
+#include <vector>
 
 namespace {
 
-// RAII cho HANDLE của FindFirstFileA/FindNextFileA.
-class FindHandle
-{
-public:
-    explicit FindHandle(HANDLE h) : m_handle(h) {}
-    ~FindHandle()
-    {
-        if (m_handle != INVALID_HANDLE_VALUE)
-            FindClose(m_handle);
-    }
-    FindHandle(const FindHandle&) = delete;
-    FindHandle& operator=(const FindHandle&) = delete;
-
-    bool valid() const { return m_handle != INVALID_HANDLE_VALUE; }
-    HANDLE get() const { return m_handle; }
-
-private:
-    HANDLE m_handle;
-};
-
 /*
- * Lấy đường dẫn tuyệt đối tới thư mục backup
- * (%APPDATA%\JustInTime\backups), tạo nếu chưa có.
- * QUAN TRỌNG: không dùng đường dẫn tương đối, vì khi
- * app tự khởi động cùng Windows (autostart), thư mục
- * làm việc hiện tại có thể khác thư mục chứa file .exe.
+ * Thư mục backup tuyệt đối (%APPDATA%\\JustInTime\\backups), tạo nếu chưa có.
+ * QUAN TRỌNG: không dùng đường dẫn tương đối, vì khi app tự khởi động
+ * cùng Windows (autostart), thư mục làm việc hiện tại có thể khác thư mục
+ * chứa file .exe. Dùng std::filesystem (UTF-16) để chạy đúng cả khi tên
+ * tài khoản Windows có ký tự Unicode.
  */
-std::string getBackupDir()
+std::filesystem::path getBackupDir()
 {
-    char configDir[MAX_PATH] = {0};
-    settings_get_config_dir(configDir, sizeof(configDir));
+    const std::filesystem::path dir = jit::configFile(std::filesystem::path(BACKUP_DIR).c_str());
+    if (dir.empty())
+        return {};
 
-    std::string dir = std::string(configDir) + "\\" + BACKUP_DIR;
-    CreateDirectoryA(dir.c_str(), NULL);
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
     return dir;
 }
 
@@ -76,69 +69,76 @@ std::string getBackupDir()
  * nhất. Vì tên file có định dạng backup_YYYYMMDD_HHMMSS.json nên sắp
  * xếp theo thứ tự chữ cái cũng chính là sắp xếp theo thời gian.
  */
-void cleanupOldBackups(const std::string& backupDir)
+void cleanupOldBackups(const std::filesystem::path& backupDir)
 {
-    const std::string pattern = backupDir + "\\backup_*.json";
+    std::vector<std::filesystem::path> files;
 
-    std::vector<std::string> names;
-
-    WIN32_FIND_DATAA fd;
-    FindHandle h(FindFirstFileA(pattern.c_str(), &fd));
-
-    if (!h.valid())
-        return;
-
-    do
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(backupDir, ec), end; !ec && it != end; it.increment(ec))
     {
-        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-            names.emplace_back(fd.cFileName);
-    } while (FindNextFileA(h.get(), &fd));
+        const std::filesystem::path& p = it->path();
+        const std::wstring name = p.filename().wstring();
 
-    std::sort(names.begin(), names.end());
+        if (name.rfind(L"backup_", 0) == 0 && p.extension() == L".json")
+            files.push_back(p);
+    }
 
-    const int toDelete = static_cast<int>(names.size()) - BACKUP_KEEP_COUNT;
+    std::sort(files.begin(), files.end());
+
+    const int toDelete = static_cast<int>(files.size()) - BACKUP_KEEP_COUNT;
 
     for (int i = 0; i < toDelete; i++)
-    {
-        const std::string fullPath = backupDir + "\\" + names[static_cast<size_t>(i)];
-        DeleteFileA(fullPath.c_str());
-    }
+        std::filesystem::remove(files[static_cast<size_t>(i)], ec);
 }
+
+// Số thay đổi DB tại lần backup gần nhất; -1 = chưa backup lần nào.
+long long g_lastBackupChanges = -1;
 
 } // namespace
 
 int backup_create_snapshot(void)
 {
-    const std::string backupDir = getBackupDir();
+    /*
+     * Không có gì thay đổi kể từ lần backup trước => bỏ qua. Backup xuất
+     * TOÀN BỘ bảng ra JSON (kể cả 30 ngày record đã sync), nên khi máy
+     * rảnh/khoá màn hình suốt vài tiếng thì 14 file backup giữ lại chỉ
+     * là 14 bản sao y hệt nhau - vừa tốn I/O vừa đẩy mất các bản backup
+     * cũ có giá trị.
+     */
+    const long long changes = db_change_counter();
+    if (g_lastBackupChanges >= 0 && changes == g_lastBackupChanges)
+        return 1;
+
+    const std::filesystem::path backupDir = getBackupDir();
+    if (backupDir.empty())
+        return 0;
 
     time_t now = time(NULL);
     struct tm t;
     localtime_s(&t, &now);
 
-    char filepathBuf[MAX_PATH];
-    snprintf(
-        filepathBuf,
-        sizeof(filepathBuf),
-        "%s\\backup_%04d%02d%02d_%02d%02d%02d.json",
-        backupDir.c_str(),
-        t.tm_year + 1900,
-        t.tm_mon + 1,
-        t.tm_mday,
-        t.tm_hour,
-        t.tm_min,
-        t.tm_sec
+    wchar_t fileName[64];
+    swprintf(
+        fileName, 64,
+        L"backup_%04d%02d%02d_%02d%02d%02d.json",
+        t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+        t.tm_hour, t.tm_min, t.tm_sec
     );
 
-    const int ok = db_export_json(filepathBuf);
+    const std::filesystem::path filePath = backupDir / fileName;
+    const std::string filePathUtf8 = jit::wideToUtf8(filePath.wstring());
+
+    const int ok = db_export_json(filePathUtf8.c_str());
 
     if (ok)
     {
-        wprintf(L"[BACKUP] Da sao luu du lieu vao %hs\n", filepathBuf);
+        g_lastBackupChanges = changes;
+        JIT_LOG(L"[BACKUP] Da sao luu du lieu vao %ls\n", filePath.c_str());
         cleanupOldBackups(backupDir);
     }
     else
     {
-        wprintf(L"[BACKUP][%hs] Sao luu that bai\n", ERR_DB_EXPORT_FAIL);
+        JIT_LOG(L"[BACKUP][%hs] Sao luu that bai\n", ERR_DB_EXPORT_FAIL);
     }
 
     return ok;

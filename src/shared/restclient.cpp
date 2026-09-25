@@ -1,108 +1,50 @@
 //
 // restclient.cpp
 //
-// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên 100% interface extern "C" trong
-// restclient.h - mọi file .c/.cpp gọi vào đây không cần đổi gì cả).
-//
-// Thay đổi thật sự nằm ở CÁCH VIẾT bên trong:
-//   - RAII cho HINTERNET (lớp WinHttpHandle) thay vì tự gọi
-//     WinHttpCloseHandle() thủ công ở từng nhánh if/else - bản C cũ
-//     tuy đúng nhưng rất dễ rò rỉ handle nếu sau này ai đó thêm 1
-//     "return sớm" mới mà quên đóng handle ở nhánh đó. Với RAII,
-//     handle LUÔN được đóng khi ra khỏi scope, bất kể ra bằng đường
-//     nào (kể cả exception, dù code này không ném exception).
-//   - std::wstring/std::string thay vì buffer wchar_t/char cấp phát
-//     tay với size cố định phải đoán trước (vd wchar_t apikey[2048]
-//     trong bản cũ) - giảm hẳn 1 lớp lỗi tràn bộ đệm tiềm ẩn.
-//   - Luồng điều khiển phẳng (early return) thay vì lồng if/else 3-4
-//     cấp như bản C cũ.
+// Viết lại trên nền jit::httpsRequest (httpclient.h). Interface extern "C"
+// trong restclient.h giữ nguyên - mọi nơi gọi (parentlink, applimits,
+// machines) không phải đổi gì. Khác biệt về hành vi:
+//   - Tái sử dụng kết nối TLS giữa các lần gọi (mỗi thread 1 kết nối).
+//   - Có timeout.
+//   - Tự refresh access_token + thử lại 1 lần khi gặp HTTP 401. Trước đây
+//     chỉ đường gửi activity (network.cpp) mới refresh; heartbeat, danh sách
+//     giới hạn app, parent-link... cứ 401 là im lặng thất bại cho tới khi
+//     có ai đó gọi sync.
+//   - Header không còn bị giới hạn ở buffer 4096 ký tự.
 //
 
 #include "restclient.h"
-#include "config.h"
+#include "httpclient.h"
+#include "strutil.h"
 #include "settings.h"
 #include "auth.h"
+#include "log.h"
 
-#include <winhttp.h>
-
-#include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 
-#pragma comment(lib, "winhttp.lib")
-
-namespace {
-
-// RAII cho HINTERNET - tự động WinHttpCloseHandle() khi ra khỏi
-// scope. Không cho copy (mỗi handle chỉ có 1 chủ sở hữu), cho phép
-// move.
-class WinHttpHandle
+extern "C" int restclient_refresh_if_stale(const char* used_token)
 {
-public:
-    WinHttpHandle() = default;
-    explicit WinHttpHandle(HINTERNET h) : m_handle(h) {}
+    static std::mutex refreshMutex;
+    std::lock_guard<std::mutex> lock(refreshMutex);
 
-    ~WinHttpHandle()
+    AuthSession current;
+    auth_get_session(&current);
+
+    if (!current.logged_in)
+        return 0;
+
+    if (used_token && used_token[0] != '\0' &&
+        strcmp(current.access_token, used_token) != 0)
     {
-        if (m_handle)
-            WinHttpCloseHandle(m_handle);
+        return 1; // luồng khác đã refresh trong lúc ta chờ khoá
     }
 
-    WinHttpHandle(const WinHttpHandle&) = delete;
-    WinHttpHandle& operator=(const WinHttpHandle&) = delete;
-
-    WinHttpHandle(WinHttpHandle&& other) noexcept : m_handle(other.m_handle)
-    {
-        other.m_handle = nullptr;
-    }
-
-    WinHttpHandle& operator=(WinHttpHandle&& other) noexcept
-    {
-        if (this != &other)
-        {
-            if (m_handle)
-                WinHttpCloseHandle(m_handle);
-            m_handle = other.m_handle;
-            other.m_handle = nullptr;
-        }
-        return *this;
-    }
-
-    HINTERNET get() const { return m_handle; }
-    explicit operator bool() const { return m_handle != nullptr; }
-
-private:
-    HINTERNET m_handle = nullptr;
-};
-
-// Tách phần host ra khỏi SUPABASE_URL dạng
-// "https://xxxx.supabase.co" -> "xxxx.supabase.co"
-std::wstring extract_host(const std::string& url)
-{
-    size_t pos = url.find("://");
-    std::string hostPart = (pos != std::string::npos) ? url.substr(pos + 3) : url;
-
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, hostPart.c_str(), -1, nullptr, 0);
-    std::wstring result(wlen > 0 ? wlen - 1 : 0, L'\0');
-    if (wlen > 0)
-        MultiByteToWideChar(CP_UTF8, 0, hostPart.c_str(), -1, result.data(), wlen);
-    return result;
+    return auth_refresh_session();
 }
 
-std::wstring utf8_to_wstring(const std::string& s)
-{
-    if (s.empty())
-        return L"";
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
-    std::wstring result(wlen > 0 ? wlen - 1 : 0, L'\0');
-    if (wlen > 0)
-        MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, result.data(), wlen);
-    return result;
-}
-
-} // namespace
-
-int restclient_call(
+extern "C" int restclient_call(
     const char* method,
     const wchar_t* path,
     const char* body,
@@ -113,139 +55,53 @@ int restclient_call(
     if (!method || !path || !response_out || !status_out || response_out_size <= 0)
         return 0;
 
-    AuthSession session;
-    auth_get_session(&session);
-
     char base_url[MAX_URL_LEN] = {0};
     char apikey_str[MAX_KEY_LEN] = {0};
 
-    settings_get_supabase_config(
-        base_url, sizeof(base_url),
-        apikey_str, sizeof(apikey_str)
-    );
+    settings_get_supabase_config(base_url, sizeof(base_url), apikey_str, sizeof(apikey_str));
 
-    const std::wstring host = extract_host(base_url);
-    const std::wstring apikey = utf8_to_wstring(apikey_str);
-    const std::wstring access_token = utf8_to_wstring(session.access_token);
-    const std::wstring method_w = utf8_to_wstring(method);
+    const std::wstring host = jit::utf8ToWide(jit::hostFromUrl(base_url));
+    const std::wstring apikey = jit::utf8ToWide(apikey_str);
+    const std::wstring methodW = jit::utf8ToWide(method);
+    const std::string bodyStr = body ? body : "";
+    const bool idempotent = (strcmp(method, "GET") == 0);
 
-    WinHttpHandle hSession(WinHttpOpen(
-        L"JustInTime-Agent/1.0",
-        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-        WINHTTP_NO_PROXY_NAME,
-        WINHTTP_NO_PROXY_BYPASS,
-        0
-    ));
+    jit::HttpResult result;
 
-    if (!hSession)
+    for (int attempt = 0; attempt < 2; attempt++)
     {
-        wprintf(L"[REST] WinHttpOpen that bai (%lu)\n", GetLastError());
-        return 0;
+        AuthSession session;
+        auth_get_session(&session);
+
+        std::wstring headers = L"Content-Type: application/json\r\napikey: ";
+        headers += apikey;
+        headers += L"\r\nAuthorization: Bearer ";
+        headers += jit::utf8ToWide(session.access_token);
+        headers += L"\r\n";
+        if (extra_headers)
+            headers += extra_headers;
+
+        if (!jit::httpsRequest(host, methodW.c_str(), path, headers, bodyStr, result, idempotent))
+        {
+            JIT_LOG(L"[REST] Request that bai (khong ket noi duoc)\n");
+            return 0;
+        }
+
+        if (result.status == 401 && attempt == 0 && session.logged_in &&
+            restclient_refresh_if_stale(session.access_token))
+        {
+            continue; // thử lại 1 lần với token mới
+        }
+
+        break;
     }
 
-    WinHttpHandle hConnect(WinHttpConnect(
-        hSession.get(),
-        host.c_str(),
-        INTERNET_DEFAULT_HTTPS_PORT,
-        0
-    ));
+    const size_t copyLen = result.body.size() < static_cast<size_t>(response_out_size - 1)
+        ? result.body.size()
+        : static_cast<size_t>(response_out_size - 1);
 
-    if (!hConnect)
-    {
-        wprintf(L"[REST] WinHttpConnect that bai (%lu)\n", GetLastError());
-        return 0;
-    }
-
-    WinHttpHandle hRequest(WinHttpOpenRequest(
-        hConnect.get(),
-        method_w.c_str(),
-        path,
-        NULL,
-        WINHTTP_NO_REFERER,
-        WINHTTP_DEFAULT_ACCEPT_TYPES,
-        WINHTTP_FLAG_SECURE
-    ));
-
-    if (!hRequest)
-    {
-        wprintf(L"[REST] WinHttpOpenRequest that bai (%lu)\n", GetLastError());
-        return 0;
-    }
-
-    wchar_t headers[4096];
-    swprintf(
-        headers,
-        4096,
-        L"Content-Type: application/json\r\n"
-        L"apikey: %ls\r\n"
-        L"Authorization: Bearer %ls\r\n"
-        L"%ls",
-        apikey.c_str(),
-        access_token.c_str(),
-        extra_headers ? extra_headers : L""
-    );
-
-    const int body_len = body ? static_cast<int>(strlen(body)) : 0;
-
-    BOOL sent = WinHttpSendRequest(
-        hRequest.get(),
-        headers,
-        static_cast<DWORD>(-1),
-        const_cast<LPVOID>(static_cast<const void*>(body)),
-        static_cast<DWORD>(body_len),
-        static_cast<DWORD>(body_len),
-        0
-    );
-
-    if (!sent || !WinHttpReceiveResponse(hRequest.get(), NULL))
-    {
-        wprintf(L"[REST] Gui request that bai (%lu)\n", GetLastError());
-        return 0;
-    }
-
-    DWORD status = 0;
-    DWORD status_size = sizeof(status);
-
-    WinHttpQueryHeaders(
-        hRequest.get(),
-        WINHTTP_QUERY_FLAG_NUMBER | WINHTTP_QUERY_STATUS_CODE,
-        WINHTTP_HEADER_NAME_BY_INDEX,
-        &status,
-        &status_size,
-        WINHTTP_NO_HEADER_INDEX
-    );
-
-    DWORD total_read = 0;
-
-    for (;;)
-    {
-        DWORD available = 0;
-
-        if (!WinHttpQueryDataAvailable(hRequest.get(), &available) || available == 0)
-            break;
-
-        DWORD remaining = static_cast<DWORD>(response_out_size) - 1 - total_read;
-        if (available > remaining)
-            available = remaining;
-
-        if (available == 0)
-            break;
-
-        DWORD bytes_read = 0;
-
-        if (
-            !WinHttpReadData(hRequest.get(), response_out + total_read, available, &bytes_read)
-            || bytes_read == 0
-        )
-            break;
-
-        total_read += bytes_read;
-    }
-
-    response_out[total_read] = '\0';
-    *status_out = status;
-
-    // hRequest/hConnect/hSession tự đóng khi ra khỏi scope ở đây
-    // (destructor của WinHttpHandle) - không cần dọn tay.
+    memcpy(response_out, result.body.data(), copyLen);
+    response_out[copyLen] = '\0';
+    *status_out = result.status;
     return 1;
 }

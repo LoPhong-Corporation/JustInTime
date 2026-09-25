@@ -31,7 +31,17 @@ typedef struct
 
 } SyncRecord;
 
-void sync_pending_records(void);
+/*
+ * Đồng bộ các record chưa sync lên cloud (gửi theo lô, tự cô lập record
+ * lỗi - xem batchsend.h). Chặn (blocking) theo I/O mạng: KHÔNG được gọi
+ * từ luồng theo dõi hoạt động/GUI - main.cpp chạy nó ở luồng "cloud"
+ * riêng.
+ *
+ * Trả về 0 nếu bình thường (kể cả không có gì để gửi / chưa đăng nhập),
+ * -1 nếu lượt sync bị dừng sớm vì mất mạng/server lỗi - caller nên giãn
+ * nhịp thử lại (backoff) thay vì cứ 30 giây gõ cửa 1 lần.
+ */
+int sync_pending_records(void);
 
 
 #ifdef __cplusplus

@@ -1,9 +1,27 @@
 // main.cpp
 //
-// Điểm vào app: khởi tạo Qt, tray icon, và một worker thread
-// chạy các hàm lõi C (monitor_activity/sync/backup/summary)
-// y hệt logic của bản Win32 thuần trước đây - chỉ có lớp UI
-// (tray, dialog) là được viết lại bằng Qt/C++.
+// Điểm vào app: khởi tạo Qt, tray icon, và các worker thread chạy các hàm
+// lõi (monitor_activity/sync/backup/summary).
+//
+// Đợt tối ưu:
+//   - TÁCH LÀM 2 LUỒNG thay vì 1:
+//       * "watch" : chỉ monitor_activity() + activity_check_limits(),
+//         mỗi 1 giây - không bao giờ chờ mạng.
+//       * "cloud" : sync_pending_records()/machines_push_heartbeat()/
+//         applimits_refresh_my_limits()/backup - có gọi mạng (WinHTTP có
+//         thể chặn hàng chục giây nếu mạng chập chờn).
+//     Trước đây cả 2 việc này chạy tuần tự trên CÙNG 1 luồng: 1 lần gọi
+//     mạng bị treo (proxy lỗi, DNS treo...) làm việc theo dõi hoạt động -
+//     và luôn cả activity_check_limits() (chặn app theo giới hạn phụ
+//     huynh đặt) - dừng lại theo, có thể tới hàng chục giây.
+//   - Console debug được tạo LƯỜI (chỉ khi bật trong tray), xem log.h -
+//     trước đây AllocConsole() luôn chạy lúc khởi động (kể cả khi ẩn ngay
+//     sau đó), nghĩa là mọi JIT_LOG() trong code lõi luôn tốn công định
+//     dạng chuỗi dù chẳng ai xem.
+//   - sync_pending_records() trả về != 0 khi lượt sync bị dừng sớm vì mất
+//     mạng: luồng cloud giãn nhịp (backoff) thay vì cứ đúng 30 giây lại
+//     thử, để không gõ cửa 1 server đang lỗi liên tục.
+//
 
 #include <QApplication>
 #include <QMessageBox>
@@ -17,12 +35,9 @@
 
 #include <cstdio>
 #include <ctime>
+#include <algorithm>
 #include <atomic>
 #include <thread>
-
-#include <io.h>
-#include <fcntl.h>
-#include <clocale>
 
 extern "C" {
 #include "activity.h"
@@ -30,6 +45,7 @@ extern "C" {
 #include "sync.h"
 #include "machines.h"
 #include "backup.h"
+#include "applimits.h"
 #include "config.h"
 #include "settings.h"
 #include "auth.h"
@@ -37,6 +53,7 @@ extern "C" {
 #include "remoteview.h"
 }
 
+#include "log.h"
 #include "trayicon.h"
 
 static std::atomic<bool> g_workerRunning{true};
@@ -136,7 +153,7 @@ static HWND createPowerEventWindow(void)
 
     if (!hwnd)
     {
-        wprintf(
+        JIT_LOG(
             L"[POWER] Khong tao duoc cua so nhan su kien khoa may/ngu (%lu) - "
             L"tinh nang phat hien khoa man hinh/sleep se khong hoat dong.\n",
             GetLastError()
@@ -146,7 +163,7 @@ static HWND createPowerEventWindow(void)
 
     if (!WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION))
     {
-        wprintf(
+        JIT_LOG(
             L"[POWER] WTSRegisterSessionNotification that bai (%lu) - "
             L"van nhan duoc su kien sleep/resume, nhung khong nhan duoc "
             L"su kien khoa/mo khoa man hinh.\n",
@@ -168,18 +185,65 @@ static void destroyPowerEventWindow(HWND hwnd)
 }
 
 /*
- * Worker thread: chạy vòng lặp theo dõi/sync/backup/báo cáo.
- * Không đụng tới bất kỳ đối tượng Qt/QWidget nào (chỉ gọi
- * hàm C thuần), nên an toàn khi chạy trên thread riêng,
- * tách biệt khỏi GUI thread để tray/dialog không bị đứng
- * hình mỗi khi có lệnh gọi mạng (WinHTTP là đồng bộ/blocking).
+ * Luồng "watch": CHỈ theo dõi hoạt động + tự thực thi giới hạn app
+ * (activity_check_limits() chỉ đọc bộ nhớ đệm cục bộ - xem applimits.h,
+ * không gọi mạng). Không đụng Qt/QWidget, không bao giờ gọi WinHTTP -
+ * luôn phản hồi trong ~1 giây kể cả khi mạng đang có vấn đề.
  */
-static void workerLoop(TrayIcon *tray)
+static void watchLoop(TrayIcon *tray)
 {
-    time_t lastSync       = time(nullptr);
+    time_t lastLimitCheck = time(nullptr);
+
+    while (g_workerRunning.load())
+    {
+        if (!tray->isPaused())
+            monitor_activity();
+
+        const time_t now = time(nullptr);
+
+        if (now - lastLimitCheck >= 20)
+        {
+            ActivityLimitEvent events[8];
+            const int event_count = activity_check_limits(events, 8);
+
+            for (int i = 0; i < event_count; i++)
+            {
+                const QString processName = QString::fromWCharArray(events[i].process_name);
+                const int reason = events[i].reason;
+
+                /*
+                 * QSystemTrayIcon không thread-safe - phải chuyển lời gọi
+                 * sang GUI thread bằng QueuedConnection.
+                 */
+                QMetaObject::invokeMethod(
+                    tray, "notifyLimitBlocked", Qt::QueuedConnection,
+                    Q_ARG(QString, processName), Q_ARG(int, reason)
+                );
+            }
+
+            lastLimitCheck = now;
+        }
+
+        Sleep(1000);
+    }
+}
+
+/*
+ * Luồng "cloud": mọi việc có gọi mạng - sync, heartbeat, làm mới bộ nhớ
+ * đệm giới hạn app, backup + dọn dữ liệu cũ. Tách khỏi luồng theo dõi để
+ * WinHTTP bị treo không ảnh hưởng tới việc theo dõi/chặn app thời gian
+ * thực.
+ */
+static void cloudLoop()
+{
+    time_t lastSync       = 0;
     time_t lastBackup     = time(nullptr);
     time_t lastSummary    = time(nullptr);
-    time_t lastLimitCheck = time(nullptr);
+    time_t lastLimitsPull = 0;
+
+    // backoff riêng cho sync khi server/mạng đang lỗi, để không cứ 30s lại
+    // gõ cửa 1 nơi chắc chắn đang thất bại.
+    int syncBackoffSec = 0;
 
     backup_create_snapshot();
 
@@ -188,29 +252,31 @@ static void workerLoop(TrayIcon *tray)
         AppSettings s;
         settings_get(&s);
 
-        if (!tray->isPaused())
-        {
-            monitor_activity();
-        }
+        const time_t now = time(nullptr);
+        const int syncInterval = s.sync_interval_sec + syncBackoffSec;
 
-        time_t now = time(nullptr);
-
-        if (now - lastSync >= s.sync_interval_sec)
+        if (now - lastSync >= syncInterval)
         {
-            sync_pending_records();
+            const int result = sync_pending_records();
+            syncBackoffSec = (result != 0) ? (std::min)(syncBackoffSec == 0 ? 30 : syncBackoffSec * 2, 600) : 0;
 
             /*
-             * FIX (đồng bộ máy không hoạt động): trước đây CHỈ
-             * dashboard-go đẩy heartbeat, nên "last_seen" của máy
-             * này đứng yên mãi nếu không ai mở dashboard web - máy
-             * khác luôn thấy nó "Offline". Agent C (luôn chạy nền)
-             * giờ tự đẩy heartbeat của chính mình cùng nhịp với
-             * sync - không quan trọng, bỏ qua lỗi nếu chưa đăng
-             * nhập/mất mạng, thử lại ở lần tiếp theo.
+             * FIX (đồng bộ máy không hoạt động): trước đây CHỈ dashboard-go
+             * đẩy heartbeat, nên "last_seen" của máy này đứng yên mãi nếu
+             * không ai mở dashboard web. Agent tự đẩy heartbeat cùng nhịp
+             * với sync - bỏ qua lỗi nếu chưa đăng nhập/mất mạng.
              */
             machines_push_heartbeat();
 
             lastSync = now;
+        }
+
+        // Làm mới bộ nhớ đệm giới hạn app mỗi ~60s (đủ mới, không tốn quá
+        // nhiều request) - luồng "watch" chỉ đọc bộ nhớ đệm này.
+        if (now - lastLimitsPull >= 60)
+        {
+            applimits_refresh_my_limits();
+            lastLimitsPull = now;
         }
 
         if (now - lastBackup >= s.backup_interval_sec)
@@ -226,41 +292,6 @@ static void workerLoop(TrayIcon *tray)
             lastSummary = now;
         }
 
-        /*
-         * Kiểm tra giới hạn app do phụ huynh đặt (chỉ có tác
-         * dụng nếu máy này là APP_ROLE_CHILD và đã đăng nhập -
-         * activity_check_limits() tự bỏ qua nếu không đúng
-         * điều kiện). Không cần nhanh như monitor_activity(),
-         * 20s/lần là đủ - tránh gọi mạng liên tục.
-         */
-        if (now - lastLimitCheck >= 20)
-        {
-            ActivityLimitEvent events[8];
-            int event_count = activity_check_limits(events, 8);
-
-            for (int i = 0; i < event_count; i++)
-            {
-                QString processName = QString::fromWCharArray(events[i].process_name);
-                int reason = events[i].reason;
-
-                /*
-                 * QSystemTrayIcon không thread-safe - phải
-                 * chuyển lời gọi sang GUI thread bằng
-                 * QueuedConnection, không được gọi trực tiếp
-                 * từ worker thread này.
-                 */
-                QMetaObject::invokeMethod(
-                    tray,
-                    "notifyLimitBlocked",
-                    Qt::QueuedConnection,
-                    Q_ARG(QString, processName),
-                    Q_ARG(int, reason)
-                );
-            }
-
-            lastLimitCheck = now;
-        }
-
         Sleep(1000);
     }
 }
@@ -270,38 +301,19 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     /*
-     * Không thoát app khi đóng dialog cuối cùng (Settings,
-     * Login...) - app chỉ thoát khi bấm "Exit" trong tray.
+     * Không thoát app khi đóng dialog cuối cùng (Settings, Login...) -
+     * app chỉ thoát khi bấm "Exit" trong tray.
      */
     app.setQuitOnLastWindowClosed(false);
 
     /*
-     * Đăng ký nhận sự kiện khoá màn hình / sleep-resume của
-     * Windows càng sớm càng tốt, để không bỏ lỡ sự kiện nào
-     * xảy ra trong lúc app đang khởi động.
+     * Đăng ký nhận sự kiện khoá màn hình / sleep-resume của Windows càng
+     * sớm càng tốt, để không bỏ lỡ sự kiện nào xảy ra trong lúc app đang
+     * khởi động.
      */
     g_powerEventWnd = createPowerEventWindow();
 
-    /*
-     * Console debug: tạo sẵn nhưng ẩn mặc định, để mọi
-     * wprintf() trong code C lõi vẫn hoạt động bình thường,
-     * chỉ là ẩn khỏi mắt người dùng trừ khi bật trong menu.
-     */
-    AllocConsole();
-
-    FILE *dummy;
-    freopen_s(&dummy, "CONOUT$", "w", stdout);
-    freopen_s(&dummy, "CONOUT$", "w", stderr);
-
-    _setmode(_fileno(stdout), _O_U16TEXT);
-    setlocale(LC_ALL, "");
-
-    HWND consoleWnd = GetConsoleWindow();
-
-    if (consoleWnd)
-        ShowWindow(consoleWnd, SW_HIDE);
-
-    wprintf(L"JustInTime Agent Started (Qt UI)\n");
+    JIT_LOG(L"JustInTime Agent Started (Qt UI)\n");
 
     if (!QSystemTrayIcon::isSystemTrayAvailable())
     {
@@ -348,7 +360,8 @@ int main(int argc, char *argv[])
         );
     }
 
-    std::thread worker(workerLoop, &tray);
+    std::thread watchThread(watchLoop, &tray);
+    std::thread cloudThread(cloudLoop);
 
     int ret = app.exec();
 
@@ -356,13 +369,15 @@ int main(int argc, char *argv[])
     g_powerEventWnd = nullptr;
 
     /*
-     * Thoát: dừng worker thread trước, join xong mới đụng
-     * tới database từ main thread để tránh tranh chấp.
+     * Thoát: dừng cả 2 luồng nền trước, join xong mới đụng tới
+     * database/mạng từ main thread để tránh tranh chấp.
      */
     g_workerRunning = false;
 
-    if (worker.joinable())
-        worker.join();
+    if (watchThread.joinable())
+        watchThread.join();
+    if (cloudThread.joinable())
+        cloudThread.join();
 
     remoteview_stop();
 

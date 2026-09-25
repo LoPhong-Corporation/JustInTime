@@ -134,6 +134,14 @@ int settings_is_process_excluded(const wchar_t* process_name);
 int settings_get_config_dir(char* out, int out_size);
 
 /*
+ * Giống settings_get_config_dir() nhưng trả về UTF-16 - AN TOÀN với tên
+ * tài khoản Windows có dấu/Unicode. Mọi code mới nên dùng bản này (hoặc
+ * jit::configFile() trong paths.h); bản char* chỉ còn để tương thích
+ * (chuỗi theo ANSI code page, sẽ hỏng với ký tự ngoài code page).
+ */
+int settings_get_config_dir_w(wchar_t* out, int out_chars);
+
+/*
  * Lấy URL + key Supabase hiệu lực: ưu tiên giá trị đã lưu
  * trong settings.ini (từ menu "Setup Supabase"), nếu chưa
  * cấu hình thì dùng giá trị mặc định trong config.h.

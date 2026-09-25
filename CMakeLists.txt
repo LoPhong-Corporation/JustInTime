@@ -57,6 +57,13 @@ add_executable(JustInTime WIN32
         include/shared/database.h
         include/shared/config.h
         include/shared/error_codes.h
+        src/shared/log.cpp
+        include/shared/log.h
+        src/shared/httpclient.cpp
+        include/shared/httpclient.h
+        include/shared/strutil.h
+        include/shared/paths.h
+        include/agent/batchsend.h
         third_party/sqlite/sqlite3.c
         third_party/sqlite/sqlite3.h
 
