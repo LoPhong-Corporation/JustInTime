@@ -193,5 +193,6 @@ See the [LICENSE](LICENSE) file for more information.
 
 
 # Notice
-You should use Go dashboard instead C++ dashboard because it's in development. Moreover, Go dashboard is stable, fast and less errors
+You should use Go dashboard instead C++ dashboard because it's in development. Moreover, Go dashboard is stable, fast and less errors.
+
 **Made with ❤️ by LoPhong Corporation**
