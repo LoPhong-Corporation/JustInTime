@@ -81,6 +81,19 @@ int db_get_unsynced_records(
 int db_mark_synced(int id);
 
 /*
+ * Đánh dấu NHIỀU record đã sync bằng 1 câu UPDATE duy nhất (atomic, 1 lần
+ * ghi đĩa thay vì count lần). Trả về 1 nếu thành công.
+ */
+int db_mark_synced_batch(const int* ids, int count);
+
+/*
+ * Tổng số dòng đã thay đổi (insert/update/delete) trên kết nối này từ lúc
+ * mở DB. backup.cpp dùng để biết dữ liệu có đổi kể từ lần backup trước
+ * hay không. Trả về 0 nếu DB chưa mở.
+ */
+long long db_change_counter(void);
+
+/*
  * Đánh dấu 1 record gửi thất bại: tăng retry_count và
  * tính lại thời điểm thử lại tiếp theo (exponential backoff).
  */
@@ -95,7 +108,8 @@ int db_mark_record_synced(
 );
 
 /*
- * Xuất toàn bộ dữ liệu ra file JSON (backup cục bộ).
+ * Xuất toàn bộ dữ liệu ra file JSON (backup cục bộ). filepath là UTF-8.
+ * Ghi ra "<filepath>.tmp" rồi đổi tên nên không bao giờ để lại file dở dang.
  * Trả về 1 nếu thành công, 0 nếu thất bại.
  */
 int db_export_json(

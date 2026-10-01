@@ -16,6 +16,7 @@
 
 #include "settings.h"
 #include "config.h"
+#include "paths.h"
 
 #include <windows.h>
 #include <wincrypt.h>
@@ -63,15 +64,9 @@ void setDefaults(AppSettings* s)
     s->supabase_key[0]       = '\0';
 }
 
-bool getSettingsPath(std::string& out)
+std::filesystem::path getSettingsPath()
 {
-    char dir[MAX_PATH] = {0};
-
-    if (!settings_get_config_dir(dir, sizeof(dir)))
-        return false;
-
-    out = std::string(dir) + "\\settings.ini";
-    return true;
+    return jit::configFile(L"settings.ini");
 }
 
 std::string trimNewline(std::string s)
@@ -93,7 +88,7 @@ std::string trimLeadingSpace(std::string s)
  * Đọc toàn bộ file .ini vào 1 bảng key->value - đơn giản hơn nhiều
  * so với if/else nối tiếp của bản C, và dễ mở rộng thêm setting mới.
  */
-std::map<std::string, std::string> parseIniFile(const std::string& path)
+std::map<std::string, std::string> parseIniFile(const std::filesystem::path& path)
 {
     std::map<std::string, std::string> out;
 
@@ -183,30 +178,43 @@ std::string generateRemoteViewToken()
 
 } // namespace
 
+int settings_get_config_dir_w(
+    wchar_t* out,
+    int out_chars)
+{
+    wchar_t appdata[MAX_PATH] = {0};
+    const DWORD n = GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
+
+    if (n == 0 || n >= MAX_PATH)
+        return 0;
+
+    if (swprintf(out, static_cast<size_t>(out_chars), L"%ls\\JustInTime", appdata) < 0)
+        return 0;
+
+    CreateDirectoryW(out, NULL);
+    return 1;
+}
+
 int settings_get_config_dir(
     char* out,
     int out_size)
 {
-    const char* appdata = getenv("APPDATA");
+    wchar_t wide[MAX_PATH] = {0};
 
-    if (!appdata)
+    if (!settings_get_config_dir_w(wide, MAX_PATH))
         return 0;
 
-    snprintf(out, out_size, "%s\\JustInTime", appdata);
-    CreateDirectoryA(out, NULL);
-
-    return 1;
+    // Chỉ để tương thích: chuyển sang ANSI code page như getenv() trước đây.
+    return WideCharToMultiByte(CP_ACP, 0, wide, -1, out, out_size, NULL, NULL) > 0 ? 1 : 0;
 }
 
 int settings_save(const AppSettings* s)
 {
-    std::string path;
-    if (!getSettingsPath(path))
+    const std::filesystem::path path = getSettingsPath();
+    if (path.empty())
         return 0;
 
-    std::ofstream f(path, std::ios::out | std::ios::trunc);
-    if (!f)
-        return 0;
+    std::ostringstream f;
 
     f << "; JustInTime Agent - file cau hinh\n";
     f << "sync_interval_sec=" << s->sync_interval_sec << "\n";
@@ -225,16 +233,18 @@ int settings_save(const AppSettings* s)
     f << "remote_view_port=" << s->remote_view_port << "\n";
     f << "remote_view_token=" << s->remote_view_token << "\n";
 
-    return f.good() ? 1 : 0;
+    // Ghi atomic: crash/mất điện giữa chừng không làm hỏng settings.ini
+    // (mất luôn cả remote_view_token đã sinh và cấu hình Supabase).
+    return jit::writeFileAtomic(path, f.str()) ? 1 : 0;
 }
 
 void settings_load(AppSettings* out)
 {
     setDefaults(out);
 
-    std::string path;
+    const std::filesystem::path path = getSettingsPath();
 
-    if (!getSettingsPath(path))
+    if (path.empty())
     {
         std::lock_guard<std::mutex> lock(settingsMutex());
         g_settings = *out;

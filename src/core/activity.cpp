@@ -1,25 +1,31 @@
 //
 // activity.cpp
 //
-// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface
-// extern "C" trong activity.h). Đây là module NHẠY CẢM NHẤT về đồng
-// bộ hoá luồng (worker thread ghi, GUI thread + HTTP thread đọc), nên
-// khi chuyển đổi mình giữ NGUYÊN VẸN từng ranh giới khoá/mở khoá y
-// hệt bản C gốc trước khi chuyển đổi - không gộp, không tách thêm, không đổi thời điểm
-// lock được giữ hay nhả (đặc biệt là finish_current_record(), nơi
-// lock CHỦ Ý được nhả trước khi gọi settings_get()/db_insert_activity()
-// để tránh giữ khoá trong lúc I/O). Chỉ đổi:
-//   - std::mutex (magic static) + std::lock_guard thay
-//     CRITICAL_SECTION tự quản - cùng lý do đã nêu ở device.cpp.
-//     std::lock_guard tự nhả khoá khi ra khỏi scope, nên những đoạn
-//     bản C cũ phải tự EnterCriticalSection/LeaveCriticalSection lặp
-//     lại 2-3 lần trong 1 hàm giờ dùng { } để giới hạn phạm vi mỗi
-//     lock_guard, rõ ràng hơn về việc khoá đang giữ ở đoạn nào.
-//   - g_finish_in_progress vẫn là 1 biến int thường (được bảo vệ bởi
-//     CÙNG mutex, giống hệt bản C) - không đổi sang std::atomic vì
-//     bản C cũng không dùng atomic cho biến này (nó luôn được đọc/ghi
-//     trong lúc đã giữ khoá), đổi sẽ là thay đổi hành vi không cần
-//     thiết.
+// Đã CHUYỂN TỪ C SANG C++ (giữ nguyên interface extern "C" trong
+// activity.h). Đây là module NHẠY CẢM NHẤT về đồng bộ hoá luồng (worker
+// thread ghi, GUI thread + HTTP thread đọc), nên khi chuyển đổi các ranh
+// giới khoá/mở khoá được giữ NGUYÊN VẸN: finishCurrentRecord() CHỦ Ý nhả
+// khoá trước khi gọi settings_get()/db_insert_activity() để không giữ khoá
+// trong lúc I/O.
+//
+// Đợt tối ưu/sửa lỗi sau đó (đều có chú thích tại chỗ):
+//   1. Đọc tên process bằng PROCESS_QUERY_LIMITED_INFORMATION +
+//      QueryFullProcessImageNameW. Trước đây dùng OpenProcess(VM_READ) +
+//      GetModuleBaseNameW nên với app chạy "as Administrator" (hoặc bất kỳ
+//      process nào không đọc được bộ nhớ) lời gọi thất bại, monitor_activity()
+//      im lặng bỏ qua, và TOÀN BỘ thời gian dùng app đó bị cộng cho app
+//      trước đó - đồng thời giới hạn app (kill) không nhận ra nó.
+//   2. Cờ g_suspended: sau khi khoá máy/ngủ, luồng theo dõi KHÔNG được tự
+//      mở record mới cho tới khi resume. Trước đây chỉ reset g_last_window,
+//      nên nếu luồng theo dõi chạy thêm 1 nhịp giữa lúc nhận sự kiện và lúc
+//      máy thật sự ngủ thì 1 record mới được mở ra và sau khi thức dậy nó
+//      "sống tiếp", cộng cả khoảng ngủ vào thời lượng dùng app.
+//   3. Sau khi chốt record, xoá luôn g_current_record: tránh activity_check_limits()
+//      và remote view đọc lại app/thời điểm cũ của phiên đã đóng, và tránh
+//      finishCurrentRecord() tính duration = now - 0 (hàng chục năm) nếu
+//      lỡ được gọi khi chưa có record nào mở.
+//   4. Toàn bộ wprintf -> JIT_LOG (không tốn công format/ghi console khi
+//      không bật debug console).
 //
 
 #include "activity.h"
@@ -27,10 +33,11 @@
 #include "settings.h"
 #include "applimits.h"
 #include "auth.h"
+#include "log.h"
 
 #include <windows.h>
-#include <psapi.h>
 
+#include <atomic>
 #include <cstdio>
 #include <cwchar>
 #include <ctime>
@@ -43,10 +50,34 @@ ActiveWindow g_last_window = {};
 ActivityRecord g_current_record = {};
 bool g_finish_in_progress = false;
 
+// true từ lúc nhận sự kiện khoá máy/ngủ cho tới khi mở khoá/thức dậy. Đọc/ghi
+// (khi cần nhất quán với g_last_window) luôn trong lúc giữ currentMutex().
+std::atomic<bool> g_suspended{false};
+
 std::mutex& currentMutex()
 {
     static std::mutex m;
     return m;
+}
+
+/*
+ * Tên file (không kèm đường dẫn) của process đang mở qua `process`.
+ * Handle chỉ cần PROCESS_QUERY_LIMITED_INFORMATION - quyền này được cấp
+ * ngay cả cho process chạy với quyền cao hơn ta.
+ */
+bool getProcessBaseName(HANDLE process, wchar_t* out, DWORD outChars)
+{
+    wchar_t full[MAX_PATH * 2] = {0};
+    DWORD size = static_cast<DWORD>(sizeof(full) / sizeof(full[0]));
+
+    if (!QueryFullProcessImageNameW(process, 0, full, &size))
+        return false;
+
+    const wchar_t* base = wcsrchr(full, L'\\');
+    base = base ? base + 1 : full;
+
+    wcsncpy_s(out, outChars, base, _TRUNCATE);
+    return out[0] != L'\0';
 }
 
 /*
@@ -70,14 +101,14 @@ int getActiveWindowInfo(ActiveWindow* window)
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
 
-    HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!process)
         return 0;
 
-    int success = GetModuleBaseNameW(process, NULL, window->process_name, MAX_PATH);
+    const bool success = getProcessBaseName(process, window->process_name, MAX_PATH);
     CloseHandle(process);
 
-    return success;
+    return success ? 1 : 0;
 }
 
 /*
@@ -90,7 +121,7 @@ void printActivityReport(const ActivityRecord* record)
     long minutes = (total % 3600) / 60;
     long seconds = total % 60;
 
-    wprintf(
+    JIT_LOG(
         L"\n"
         L"=====================================\n"
         L"[ACTIVITY]\n"
@@ -103,12 +134,10 @@ void printActivityReport(const ActivityRecord* record)
 }
 
 /*
- * Bắt đầu activity mới
+ * Bắt đầu activity mới. GỌI KHI ĐÃ GIỮ currentMutex().
  */
-void startNewRecord(const ActiveWindow* window)
+void startNewRecordLocked(const ActiveWindow* window)
 {
-    std::lock_guard<std::mutex> lock(currentMutex());
-
     wcscpy_s(g_current_record.process_name, MAX_PATH, window->process_name);
     wcscpy_s(g_current_record.window_title, 512, window->window_title);
 
@@ -141,11 +170,22 @@ void finishCurrentRecord()
         if (g_finish_in_progress)
             return;
 
+        // Không có record nào đang mở (vd đã được chốt bởi activity_suspend()
+        // rồi): không có gì để lưu. Nếu không chặn ở đây, start_time = 0 sẽ cho
+        // duration = now - 0 (~56 năm).
+        if (g_current_record.start_time == 0)
+            return;
+
         g_finish_in_progress = true;
 
         g_current_record.end_time = time(NULL);
+
+        // Đồng hồ hệ thống có thể bị chỉnh lùi (NTP, người dùng đổi giờ): không
+        // bao giờ ghi duration âm.
         g_current_record.duration_seconds =
-            static_cast<long>(g_current_record.end_time - g_current_record.start_time);
+            g_current_record.end_time > g_current_record.start_time
+                ? static_cast<long>(g_current_record.end_time - g_current_record.start_time)
+                : 0;
 
         /*
          * Chụp lại 1 bản snapshot cục bộ để dùng sau khi rời khỏi
@@ -210,14 +250,14 @@ int killIfForeground(const wchar_t* processName)
     GetWindowThreadProcessId(hwnd, &pid);
 
     HANDLE process = OpenProcess(
-        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE,
+        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
         FALSE, pid
     );
     if (!process)
         return 0;
 
     wchar_t currentName[MAX_PATH] = {0};
-    int gotName = GetModuleBaseNameW(process, NULL, currentName, MAX_PATH);
+    const bool gotName = getProcessBaseName(process, currentName, MAX_PATH);
 
     int killed = 0;
     if (gotName && _wcsicmp(currentName, processName) == 0)
@@ -228,6 +268,36 @@ int killIfForeground(const wchar_t* processName)
 
     CloseHandle(process);
     return killed;
+}
+
+/*
+ * Chốt sổ record đang mở NGAY BÂY GIỜ rồi reset trạng thái theo dõi, để
+ * lần monitor_activity() kế tiếp (nếu không bị chặn bởi g_suspended) luôn
+ * bắt đầu MỘT RECORD HOÀN TOÀN MỚI - dù cửa sổ active lúc đó có trùng y
+ * hệt cửa sổ trước đó hay không - thay vì lặng lẽ cộng dồn khoảng thời
+ * gian đã trôi qua vào record cũ.
+ *
+ * Dùng chung cho activity_suspend() (khoá máy/ngủ) và
+ * activity_check_limits() (vừa chặn 1 app). KHÔNG đụng tới g_suspended.
+ */
+void closeCurrentSession()
+{
+    bool hasOpenRecord;
+    {
+        std::lock_guard<std::mutex> lock(currentMutex());
+        hasOpenRecord = (g_last_window.process_name[0] != L'\0');
+    }
+
+    if (!hasOpenRecord)
+        return; // chưa có record nào để chốt
+
+    finishCurrentRecord();
+
+    {
+        std::lock_guard<std::mutex> lock(currentMutex());
+        memset(&g_last_window, 0, sizeof(g_last_window));
+        memset(&g_current_record, 0, sizeof(g_current_record));
+    }
 }
 
 } // namespace
@@ -251,50 +321,58 @@ void activity_get_current(
 
 void monitor_activity(void)
 {
+    if (g_suspended.load())
+        return; // đang khoá máy/ngủ - không tự mở record mới
+
     ActiveWindow current = {};
 
     if (!getActiveWindowInfo(&current))
         return;
 
     bool firstRun;
-    bool processChanged;
-    bool titleChanged;
+    bool changed;
 
     {
         std::lock_guard<std::mutex> lock(currentMutex());
 
+        if (g_suspended.load())
+            return;
+
         firstRun = (g_last_window.process_name[0] == L'\0');
-        processChanged = !firstRun && wcscmp(current.process_name, g_last_window.process_name) != 0;
-        titleChanged = !firstRun && wcscmp(current.window_title, g_last_window.window_title) != 0;
+        changed = !firstRun && (
+            wcscmp(current.process_name, g_last_window.process_name) != 0 ||
+            wcscmp(current.window_title, g_last_window.window_title) != 0
+        );
+
+        /*
+         * Lần chạy đầu tiên (bao gồm cả lần đầu tiên sau khi
+         * closeCurrentSession() đã reset trạng thái vì máy vừa khoá màn
+         * hình/ngủ/chặn app) - luôn bắt đầu 1 record mới. Đặt
+         * g_last_window và mở record trong CÙNG 1 lần giữ khoá (trước đây
+         * là 2 lần giữ khoá riêng).
+         */
+        if (firstRun)
+        {
+            g_last_window = current;
+            startNewRecordLocked(&current);
+        }
     }
 
-    /*
-     * Lần chạy đầu tiên (bao gồm cả lần đầu tiên sau khi
-     * activity_suspend() đã reset trạng thái vì máy vừa khoá màn
-     * hình/ngủ) - luôn bắt đầu 1 record mới.
-     */
     if (firstRun)
     {
-        {
-            std::lock_guard<std::mutex> lock(currentMutex());
-            g_last_window = current;
-        }
-
-        startNewRecord(&current);
-
-        wprintf(L"[START] %ls\n", current.process_name);
+        JIT_LOG(L"[START] %ls\n", current.process_name);
         return;
     }
 
     /* Nếu không thay đổi thì bỏ qua */
-    if (!processChanged && !titleChanged)
+    if (!changed)
         return;
 
     /* Kết thúc record cũ */
     finishCurrentRecord();
 
     /* Log chuyển app */
-    wprintf(
+    JIT_LOG(
         L"\n"
         L"=====================================\n"
         L"[SWITCH]\n"
@@ -305,52 +383,37 @@ void monitor_activity(void)
     );
 
     /* Record mới */
-    startNewRecord(&current);
-
     {
         std::lock_guard<std::mutex> lock(currentMutex());
+
+        // activity_suspend() có thể đã chạy (GUI thread) trong lúc ta đang chốt
+        // record cũ ở trên: không mở lại record ngay sau khi máy khoá.
+        if (g_suspended.load())
+            return;
+
+        startNewRecordLocked(&current);
         g_last_window = current;
     }
 }
 
 /*
- * Máy chuẩn bị khoá màn hình / đi ngủ: chốt sổ record đang mở NGAY
- * BÂY GIỜ (tại đúng thời điểm khoá/ngủ, không phải đợi tới lúc mở
- * khoá/thức dậy rồi mới tính lùi), sau đó reset g_last_window về
- * rỗng.
- *
- * Việc reset này là mấu chốt: nó buộc lần gọi monitor_activity() kế
- * tiếp - dù có xảy ra sau vài giây hay vài giờ, dù cửa sổ active lúc
- * đó có trùng y hệt cửa sổ trước khi khoá máy hay không - luôn rơi
- * vào nhánh "first_run", tức luôn bắt đầu MỘT RECORD HOÀN TOÀN MỚI
- * thay vì lặng lẽ cộng dồn khoảng thời gian khoá máy/ngủ vào record
- * cũ.
+ * Máy chuẩn bị khoá màn hình / đi ngủ: đặt cờ g_suspended (luồng theo dõi
+ * dừng mở record mới), rồi chốt sổ record đang mở NGAY BÂY GIỜ - tại đúng
+ * thời điểm khoá/ngủ, không phải đợi tới lúc mở khoá/thức dậy rồi mới tính
+ * lùi.
  */
 void activity_suspend(void)
 {
-    bool hasOpenRecord;
     {
+        // Đặt cờ trong lúc giữ khoá để nhất quán với các đoạn kiểm tra cờ
+        // trong monitor_activity().
         std::lock_guard<std::mutex> lock(currentMutex());
-        hasOpenRecord = (g_last_window.process_name[0] != L'\0');
+        g_suspended.store(true);
     }
 
-    if (!hasOpenRecord)
-    {
-        /*
-         * App vừa khởi động đã bị khoá máy ngay, chưa kịp có record
-         * nào để chốt - không có gì để làm.
-         */
-        return;
-    }
+    closeCurrentSession();
 
-    finishCurrentRecord();
-
-    {
-        std::lock_guard<std::mutex> lock(currentMutex());
-        memset(&g_last_window, 0, sizeof(g_last_window));
-    }
-
-    wprintf(
+    JIT_LOG(
         L"\n"
         L"=====================================\n"
         L"[LOCK/SLEEP] Da chot record hien tai,\n"
@@ -361,15 +424,14 @@ void activity_suspend(void)
 }
 
 /*
- * Máy mở khoá màn hình / thức dậy từ sleep. Không cần làm gì thêm để
- * logic đúng - monitor_activity() sẽ tự bắt đầu 1 record mới ở lần
- * gọi tiếp theo, nhờ g_last_window đã được activity_suspend() reset
- * về rỗng. Hàm này chủ yếu để log rõ thời điểm resume và dự phòng mở
- * rộng sau này.
+ * Máy mở khoá màn hình / thức dậy từ sleep: bỏ cờ g_suspended để
+ * monitor_activity() tiếp tục - lần gọi kế tiếp sẽ mở 1 record mới nhờ
+ * closeCurrentSession() đã reset trạng thái.
  */
 void activity_resume(void)
 {
-    wprintf(L"[LOCK/SLEEP] May da mo khoa / thuc day, tiep tuc theo doi hoat dong.\n");
+    g_suspended.store(false);
+    JIT_LOG(L"[LOCK/SLEEP] May da mo khoa / thuc day, tiep tuc theo doi hoat dong.\n");
 }
 
 int activity_check_limits(
@@ -391,6 +453,7 @@ int activity_check_limits(
     if (!auth_is_logged_in())
         return 0;
 
+    // Đọc từ bộ nhớ đệm cục bộ (không gọi mạng) - xem applimits.h.
     AppLimit limits[MAX_LIMITS];
     int limitCount = applimits_get_my_limits(limits, MAX_LIMITS);
 
@@ -465,16 +528,17 @@ int activity_check_limits(
             break;
 
         /*
-         * Chốt sổ record đang mở NGAY BÂY GIỜ (giống hệt
-         * activity_suspend() - dùng lại toàn bộ logic đó để không
-         * lặp code và không tính nhầm thời gian sau khi app đã bị
-         * kill vào thời lượng sử dụng).
+         * Chốt sổ record đang mở NGAY BÂY GIỜ (dùng chung logic với
+         * activity_suspend() để không lặp code và không tính nhầm thời
+         * gian sau khi app đã bị kill vào thời lượng sử dụng). KHÔNG dùng
+         * chính activity_suspend(): hàm đó còn đặt cờ g_suspended (dừng
+         * theo dõi cho tới khi mở khoá) - ở đây ta chỉ muốn chốt sổ.
          */
-        activity_suspend();
+        closeCurrentSession();
 
         if (killIfForeground(currentProcess))
         {
-            wprintf(
+            JIT_LOG(
                 L"\n=====================================\n"
                 L"[LIMIT] Da chan app theo yeu cau cua phu huynh: %ls\n"
                 L"=====================================\n",

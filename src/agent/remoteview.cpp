@@ -31,6 +31,8 @@
 #include "database.h"
 #include "activity.h"
 #include "jsonutil.h"
+#include "strutil.h"
+#include "log.h"
 #include "error_codes.h"
 
 #include <winsock2.h>
@@ -49,14 +51,6 @@ namespace {
 SOCKET g_listen_socket = INVALID_SOCKET;
 HANDLE g_thread = NULL;
 volatile int g_running = 0;
-
-std::string jsonEscape(const std::string& s)
-{
-    std::string out(s.size() * 6 + 16, '\0');
-    json_escape(s.c_str(), out.data(), out.size());
-    out.resize(strlen(out.c_str()));
-    return out;
-}
 
 void sendResponse(
     SOCKET client,
@@ -96,17 +90,6 @@ std::string extractToken(const std::string& path)
         end++;
 
     return path.substr(start, end - start);
-}
-
-std::string wideToUtf8(const wchar_t* w)
-{
-    if (!w || !*w)
-        return "";
-    int len = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
-    std::string result(len > 0 ? len - 1 : 0, '\0');
-    if (len > 0)
-        WideCharToMultiByte(CP_UTF8, 0, w, -1, result.data(), len, nullptr, nullptr);
-    return result;
 }
 
 void handleClient(SOCKET client)
@@ -157,8 +140,8 @@ void handleClient(SOCKET client)
 
         activity_get_current(processW, 512, titleW, 2048, &since);
 
-        const std::string processEsc = jsonEscape(wideToUtf8(processW));
-        const std::string titleEsc = jsonEscape(wideToUtf8(titleW));
+        const std::string processEsc = jit::jsonEscape(jit::wideToUtf8(processW));
+        const std::string titleEsc = jit::jsonEscape(jit::wideToUtf8(titleW));
 
         const std::string body =
             "{\"process_name\":\"" + processEsc + "\",\"window_title\":\"" + titleEsc +
@@ -171,7 +154,7 @@ void handleClient(SOCKET client)
         wchar_t summaryW[4096] = {0};
         db_build_daily_summary_text(summaryW, 4096);
 
-        const std::string summaryEsc = jsonEscape(wideToUtf8(summaryW));
+        const std::string summaryEsc = jit::jsonEscape(jit::wideToUtf8(summaryW));
         const std::string body = "{\"summary\":\"" + summaryEsc + "\"}";
 
         sendResponse(client, 200, "OK", body);
@@ -221,7 +204,7 @@ int remoteview_start(void)
 
     if (g_listen_socket == INVALID_SOCKET)
     {
-        wprintf(L"[REMOTEVIEW][%hs] Khong tao duoc socket\n", ERR_REMOTEVIEW_SOCKET_FAIL);
+        JIT_LOG(L"[REMOTEVIEW][%hs] Khong tao duoc socket\n", ERR_REMOTEVIEW_SOCKET_FAIL);
         WSACleanup();
         return 0;
     }
@@ -238,7 +221,7 @@ int remoteview_start(void)
 
     if (bind(g_listen_socket, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == SOCKET_ERROR)
     {
-        wprintf(L"[REMOTEVIEW][%hs] Bind cong %d that bai\n", ERR_REMOTEVIEW_BIND_FAIL, s.remote_view_port);
+        JIT_LOG(L"[REMOTEVIEW][%hs] Bind cong %d that bai\n", ERR_REMOTEVIEW_BIND_FAIL, s.remote_view_port);
         closesocket(g_listen_socket);
         g_listen_socket = INVALID_SOCKET;
         WSACleanup();
@@ -256,7 +239,7 @@ int remoteview_start(void)
     g_running = 1;
     g_thread = CreateThread(NULL, 0, acceptLoop, NULL, 0, NULL);
 
-    wprintf(L"[REMOTEVIEW] Dang lang nghe tren cong %d (chi doc, can token)\n", s.remote_view_port);
+    JIT_LOG(L"[REMOTEVIEW] Dang lang nghe tren cong %d (chi doc, can token)\n", s.remote_view_port);
 
     return 1;
 }
@@ -287,7 +270,7 @@ void remoteview_stop(void)
 
     WSACleanup();
 
-    wprintf(L"[REMOTEVIEW] Da dung\n");
+    JIT_LOG(L"[REMOTEVIEW] Da dung\n");
 }
 
 int remoteview_restart(void)

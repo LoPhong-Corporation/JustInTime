@@ -135,9 +135,6 @@ If the network is unavailable, records remain safely stored in SQLite and will b
 - Supabase Edge Functions
 - PostgreSQL
 - CMake
-- Python 3.13
-- Flask
-- Go
 
 ---
 

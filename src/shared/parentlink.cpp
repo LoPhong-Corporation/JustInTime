@@ -9,6 +9,7 @@
 #include "parentlink.h"
 #include "restclient.h"
 #include "jsonutil.h"
+#include "strutil.h"
 #include "auth.h"
 
 #include <cstdio>
@@ -17,13 +18,7 @@
 
 namespace {
 
-std::string jsonEscape(const std::string& s)
-{
-    std::string out(s.size() * 6 + 16, '\0');
-    json_escape(s.c_str(), out.data(), out.size());
-    out.resize(strlen(out.c_str()));
-    return out;
-}
+using jit::jsonEscape;
 
 /*
  * Bỏ dấu ngoặc kép bao quanh 1 chuỗi JSON scalar, vd

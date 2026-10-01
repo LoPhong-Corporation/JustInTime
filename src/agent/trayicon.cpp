@@ -26,6 +26,7 @@ extern "C" {
 #include "activity.h"
 #include "settings.h"
 #include "i18n.h"
+#include "log.h"
 }
 
 namespace {
@@ -328,10 +329,9 @@ void TrayIcon::onToggleDebugConsole()
 {
     m_debugVisible = !m_debugVisible;
 
-    HWND console = GetConsoleWindow();
-
-    if (console)
-        ShowWindow(console, m_debugVisible ? SW_SHOW : SW_HIDE);
+    // jit_console_show() tự tạo console (lười - lần đầu bật mới thật sự
+    // AllocConsole()) và vô hiệu hoá nút [X]/Ctrl+C của nó - xem log.h.
+    jit_console_show(m_debugVisible ? 1 : 0);
 
     m_debugAction->setChecked(m_debugVisible);
 }

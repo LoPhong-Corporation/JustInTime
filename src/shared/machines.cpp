@@ -16,6 +16,7 @@
 #include "machines.h"
 #include "restclient.h"
 #include "jsonutil.h"
+#include "strutil.h"
 #include "auth.h"
 #include "device.h"
 
@@ -23,21 +24,7 @@
 #include <cstring>
 #include <string>
 
-namespace {
-
-std::string jsonEscape(const std::string& s)
-{
-    // json_escape() có thể mở rộng mỗi ký tự tối đa 6 lần (dạng
-    // "\u00XX") - cấp đủ chỗ để không bao giờ bị cắt bớt kết quả
-    // (json_escape() tự kiểm tra biên an toàn nếu buffer vẫn thiếu,
-    // nhưng ở đây cấp dư để không cần lo trường hợp đó xảy ra).
-    std::string out(s.size() * 6 + 16, '\0');
-    json_escape(s.c_str(), out.data(), out.size());
-    out.resize(strlen(out.c_str()));
-    return out;
-}
-
-} // namespace
+using jit::jsonEscape;
 
 int machines_push_heartbeat(void)
 {
