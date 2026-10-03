@@ -98,14 +98,70 @@ add_executable(JustInTime WIN32
         # ---- parent/ : vai trò "phụ huynh" (xem dữ liệu con + đặt giới hạn) ----
         "include/parent/parentpage.h"
         src/parent/parentpage.cpp
+
+        # ---- dashboard/ : cửa sổ Dashboard (trước là dashboard-go, 1 tiến
+        # trình HTTP server + trình duyệt riêng; giờ là Qt Widgets thuần,
+        # SỐNG TRONG CÙNG tiến trình JustInTime.exe - mở từ tray, xem
+        # TrayIcon::openDashboardWindow() trong agent/trayicon.cpp) ----
+        include/dashboard/dashconfig.h
+        src/dashboard/dashconfig.cpp
+        include/dashboard/cloud.h
+        src/dashboard/cloud.cpp
+        include/dashboard/localdb.h
+        src/dashboard/localdb.cpp
+        include/dashboard/sysstats.h
+        src/dashboard/sysstats.cpp
+        include/dashboard/dashsettings.h
+        src/dashboard/dashsettings.cpp
+        include/dashboard/dashsession.h
+        src/dashboard/dashsession.cpp
+        include/dashboard/dashi18n.h
+        src/dashboard/dashi18n.cpp
+        include/dashboard/autostart.h
+        src/dashboard/autostart.cpp
+
+        include/dashboard/ui/asyncutil.h
+        include/dashboard/ui/theme.h
+        include/dashboard/ui/chartwidget.h
+        src/dashboard/ui/chartwidget.cpp
+        include/dashboard/ui/gaugewidget.h
+        src/dashboard/ui/gaugewidget.cpp
+        include/dashboard/ui/timelinewidget.h
+        src/dashboard/ui/timelinewidget.cpp
+        include/dashboard/ui/logindialog.h
+        src/dashboard/ui/logindialog.cpp
+        include/dashboard/ui/settingsdialog.h
+        src/dashboard/ui/settingsdialog.cpp
+        include/dashboard/ui/mainwindow.h
+        src/dashboard/ui/mainwindow.cpp
+        include/dashboard/ui/pages/overviewpage.h
+        src/dashboard/ui/pages/overviewpage.cpp
+        include/dashboard/ui/pages/metricpages.h
+        src/dashboard/ui/pages/metricpages.cpp
+        include/dashboard/ui/pages/localpage.h
+        src/dashboard/ui/pages/localpage.cpp
+        include/dashboard/ui/pages/cloudpage.h
+        src/dashboard/ui/pages/cloudpage.cpp
+        include/dashboard/ui/pages/devicespage.h
+        src/dashboard/ui/pages/devicespage.cpp
+        include/dashboard/ui/pages/familypage.h
+        src/dashboard/ui/pages/familypage.cpp
 )
 
 include_directories(third_party)
+include_directories(third_party/nlohmann)
 include_directories(include)
 include_directories(include/shared)
 include_directories(include/core)
 include_directories(include/agent)
 include_directories(include/parent)
+# Cho include BARE name ("cloud.h", "ui/chartwidget.h"...) dùng nội bộ
+# giữa các file dashboard/ với nhau. Code NGOÀI dashboard/ (vd
+# trayicon.cpp) include qua tiền tố "dashboard/..." (vd
+# "dashboard/ui/mainwindow.h") để không bao giờ nhầm lẫn với header cùng
+# tên bên agent (đã đổi tên 2 file có nguy cơ trùng: config.h ->
+# dashconfig.h, i18n.h -> dashi18n.h - xem chú thích đầu 2 file đó).
+include_directories(include/dashboard)
 
 target_link_libraries(
         JustInTime
@@ -117,21 +173,17 @@ target_link_libraries(
         advapi32
         ws2_32
         wtsapi32
+        pdh
+        iphlpapi
+        ntdll
 )
 
 # ------------------------------------------------------------------
-# Đưa cả dashboard (Go) ra cạnh JustInTime.exe sau khi
-# build, để tray menu "Dashboards" tìm thấy chúng ngay mà không phải
-# dò ngược cây thư mục (xem findResourceDir() trong trayicon.cpp).
-# Không lỗi nếu dashboard-go/dashboard.exe chưa được build (go build
-# ./cmd/dashboard) - chỉ là mục "Open Local Dashboard (Go)" sẽ báo
-# không tìm thấy cho tới khi bạn build nó.
+# Dashboard (C++/Qt) giờ BUILD THẲNG VÀO JustInTime.exe (xem danh sách
+# include/dashboard + src/dashboard ở trên) - không còn là tiến trình
+# .exe riêng (dashboard-go) phải copy ra cạnh JustInTime.exe sau build
+# nữa, nên bước copy trước đây ở đây đã được bỏ.
+#
+# dashboard-go/ (mã nguồn Go) vẫn còn trong repo làm tài liệu tham khảo
+# lịch sử, nhưng không còn nằm trong đường build của JustInTime.exe.
 # ------------------------------------------------------------------
-
-add_custom_command(TARGET JustInTime POST_BUILD
-        COMMAND ${CMAKE_COMMAND}
-                -DSRC="${CMAKE_SOURCE_DIR}/dashboard-go/dashboard.exe"
-                -DDEST_DIR="$<TARGET_FILE_DIR:JustInTime>/dashboard-go"
-                -P "${CMAKE_SOURCE_DIR}/cmake/copy_if_exists.cmake"
-        COMMENT "Copying Go dashboard next to JustInTime.exe (skipped if not built yet)"
-)

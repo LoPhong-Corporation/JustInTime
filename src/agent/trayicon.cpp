@@ -17,6 +17,8 @@
 #include <QHostAddress>
 #include <QTimer>
 
+#include <utility>
+
 #include <windows.h>
 
 extern "C" {
@@ -27,6 +29,11 @@ extern "C" {
 #include "settings.h"
 #include "i18n.h"
 #include "log.h"
+
+#include "dashboard/ui/mainwindow.h"
+#include "dashboard/ui/theme.h"
+#include "dashboard/dashconfig.h"
+#include "dashboard/localdb.h"
 }
 
 namespace {
@@ -116,13 +123,13 @@ TrayIcon::TrayIcon(QObject *parent) : QObject(parent)
     m_pythonDashboardAction = m_dashboardMenu->addAction(
         tr_("tray.dashboard_python"), this, &TrayIcon::onOpenPythonDashboard
     );
-    m_goDashboardAction = m_dashboardMenu->addAction(
-        tr_("tray.dashboard_go"), this, &TrayIcon::onOpenGoDashboard
+    m_dashboardAction = m_dashboardMenu->addAction(
+        tr_("tray.dashboard_go"), this, &TrayIcon::onOpenDashboard
     );
 
     const QString dashboardTip = tr_("tray.dashboard_tip");
     m_pythonDashboardAction->setToolTip(dashboardTip);
-    m_goDashboardAction->setToolTip(dashboardTip);
+    m_dashboardAction->setToolTip(dashboardTip);
 
     m_menu.addSeparator();
 
@@ -416,33 +423,40 @@ void TrayIcon::onOpenPythonDashboard()
     launchDashboard("the Python dashboard", 5000, "pythonw", { scriptPath }, dashboardDir);
 }
 
-void TrayIcon::onOpenGoDashboard()
+/*
+ * Dashboard (C++/Qt) giờ sống NGAY TRONG tiến trình JustInTime.exe này -
+ * không còn là dashboard-go/dashboard.exe chạy tách biệt (đã bị xoá khỏi
+ * build, xem CMakeLists.txt) nữa. Lợi ích chính:
+ *   - Mở tức thì, không có cửa sổ console đen nháy lên, không phải chờ
+ *     WinHTTP server bind cổng rồi mới mở trình duyệt.
+ *   - Dùng CHUNG 1 tiến trình, 1 QApplication - không tốn thêm ~15-20MB
+ *     RAM cho 1 tiến trình Qt thứ hai chạy song song.
+ *   - Không còn phụ thuộc cổng TCP 5000 cho riêng Dashboard này (Python
+ *     dashboard legacy vẫn dùng cổng đó, xem onOpenPythonDashboard()).
+ */
+void TrayIcon::openDashboardWindow()
 {
-    const QString goDir = findResourceDir("dashboard-go");
-    const QString exePath = goDir + "/dashboard.exe";
-
-    if (!QFile::exists(exePath))
+    if (!m_dashboardWindow)
     {
-        QMessageBox::warning(
-            nullptr,
-            "JustInTime",
-            QString(
-                "Could not find the Go dashboard at:\n%1\n\n"
-                "Build it first with:\n"
-                "  cd dashboard-go\n"
-                "  go build -o dashboard.exe ./cmd/dashboard"
-            ).arg(exePath)
-        );
-        return;
+        jit::dash::Config cfg = jit::dash::load();
+        auto db = jit::dash::LocalDB::open(cfg.localDbPathUtf8);
+        // db == nullptr là bình thường nếu agent chưa từng ghi activity nào -
+        // các trang liên quan trong Dashboard tự hiện thông báo, không crash.
+
+        m_dashboardWindow = new jit::dash::ui::MainWindow(cfg, std::move(db));
+        // Áp theme tối CHỈ cho cửa sổ này (không setStyleSheet() toàn app) -
+        // để không ảnh hưởng giao diện ControlPanelWindow đã có sẵn style riêng.
+        m_dashboardWindow->setStyleSheet(jit::dash::ui::darkThemeStyleSheet());
     }
 
-    /*
-     * Không truyền --tray ở đây: cái tray bạn đang thấy CHÍNH LÀ
-     * tray rồi. dashboard.exe khi chạy không có --tray chỉ start
-     * server + tự mở trình duyệt rồi chạy nền, không tạo thêm icon
-     * khay hệ thống thứ hai (xem cmd/dashboard/main.go).
-     */
-    launchDashboard("the Go dashboard", 5000, exePath, {}, goDir);
+    m_dashboardWindow->showNormal();
+    m_dashboardWindow->raise();
+    m_dashboardWindow->activateWindow();
+}
+
+void TrayIcon::onOpenDashboard()
+{
+    openDashboardWindow();
 }
 
 void TrayIcon::onParentLinkSettings()

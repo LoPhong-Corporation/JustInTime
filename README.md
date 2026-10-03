@@ -135,7 +135,10 @@ If the network is unavailable, records remain safely stored in SQLite and will b
 - Supabase Edge Functions
 - PostgreSQL
 - CMake
+- Python 3.13
+- Flask
 - Go
+
 ---
 
 # Build
@@ -191,8 +194,5 @@ This project is licensed under the MIT License.
 
 See the [LICENSE](LICENSE) file for more information.
 
-
-# Notice
-You should use Go dashboard instead C++ dashboard because it's in development. Moreover, Go dashboard is stable, fast and less errors.
 
 **Made with ❤️ by LoPhong Corporation**

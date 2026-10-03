@@ -14,6 +14,8 @@
 class UpdateChecker;
 class ControlPanelWindow;
 
+namespace jit::dash::ui { class MainWindow; }
+
 class TrayIcon : public QObject
 {
     Q_OBJECT
@@ -39,7 +41,7 @@ private slots:
     void onRemoteView();
     void onToggleDebugConsole();
     void onOpenPythonDashboard();
-    void onOpenGoDashboard();
+    void onOpenDashboard();
     void onParentLinkSettings();
     void onParentDashboard();
     void onAbout();
@@ -78,6 +80,9 @@ private:
         const QString &workingDir
     );
 
+    /* Dựng (lần đầu) hoặc chỉ show()/raise() (các lần sau) m_dashboardWindow. */
+    void openDashboardWindow();
+
     QSystemTrayIcon m_trayIcon;
     QMenu           m_menu;
 
@@ -95,7 +100,16 @@ private:
 
     QMenu   *m_dashboardMenu       = nullptr;
     QAction *m_pythonDashboardAction = nullptr;
-    QAction *m_goDashboardAction     = nullptr;
+    QAction *m_dashboardAction       = nullptr;
+
+    /*
+     * Cửa sổ Dashboard (C++/Qt, xem include/dashboard/ui/mainwindow.h) -
+     * TRONG CÙNG tiến trình với agent, không phải spawn dashboard.exe
+     * riêng như trước (dashboard-go) nữa. Dựng LƯỜI (chỉ khi bấm "Open
+     * Dashboard" lần đầu) rồi giữ lại - các lần bấm sau chỉ show()/raise()
+     * lại đúng 1 cửa sổ, không tạo mới.
+     */
+    jit::dash::ui::MainWindow *m_dashboardWindow = nullptr;
 
     QAction *m_parentLinkAction      = nullptr; /* "Được giám sát bởi..." - chỉ hiện khi role = CHILD */
     QAction *m_parentDashboardAction = nullptr; /* "Parent Dashboard..." - chỉ hiện khi role = PARENT */

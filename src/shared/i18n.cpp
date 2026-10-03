@@ -42,16 +42,15 @@ const I18nEntry g_entries[] = {
     {"tray.remote_view",         "Remote View...",                     "Xem từ xa..."},
     {"tray.dashboards_menu",     "Dashboards",                         "Bảng điều khiển"},
     {"tray.dashboard_python",    "Open Web Dashboard (Python)",        "Mở Dashboard Web (Python)"},
-    {"tray.dashboard_go",        "Open Local Dashboard (Go)",          "Mở Dashboard Cục Bộ (Go)"},
+    {"tray.dashboard_go",        "Open Dashboard",                     "Mở Dashboard"},
     {"tray.dashboard_tip",
-        "Both dashboards show the same data on http://127.0.0.1:5000 "
-        "(they're two implementations of the same dashboard, not meant "
-        "to run at the same time). Whichever is already running will "
-        "just be opened again.",
-        "Cả hai dashboard đều hiển thị cùng dữ liệu tại "
-        "http://127.0.0.1:5000 (đây là 2 cách triển khai của cùng 1 "
-        "tính năng, không nhằm chạy song song). Cái nào đang chạy sẵn "
-        "sẽ chỉ được mở lại, không chạy chồng lên."},
+        "\"Open Dashboard\" opens a native window right in this app - no "
+        "browser, no separate process. The Python dashboard is a legacy, "
+        "separate web app on http://127.0.0.1:5000, kept for now.",
+        "\"Mở Dashboard\" mở ngay 1 cửa sổ trong chính app này - không "
+        "cần trình duyệt, không chạy tiến trình riêng. Dashboard Python "
+        "là bản web cũ, riêng biệt, tại http://127.0.0.1:5000, vẫn giữ "
+        "lại tạm thời."},
     {"tray.parent_link",        "Monitored By...",                    "Được Giám Sát Bởi..."},
     {"tray.parent_link_tip",
         "See the full list of parent accounts requesting or already "
