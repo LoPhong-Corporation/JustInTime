@@ -34,13 +34,21 @@ foreach(cfg ${CMAKE_CONFIGURATION_TYPES})
 endforeach()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-# Nếu CMake không tự tìm thấy Qt6, set CMAKE_PREFIX_PATH trỏ tới
-# thư mục cài Qt, ví dụ:
-#   -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64"
+# CMake thường KHÔNG tự tìm thấy Qt6 (nó không nằm trong PATH mặc định) -
+# phải trỏ đường dẫn qua CMAKE_PREFIX_PATH lúc configure, ví dụ:
+#   cmake -B build -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64"
+# (thay 6.7.0/msvc2019_64 bằng đúng phiên bản/kit Qt bạn đã cài - xem
+# HUONG_DAN_BUILD.md mục 2 để biết cách tìm đường dẫn này).
+#
+# Dòng dưới đây chỉ là "lưới an toàn": nếu bạn QUÊN truyền
+# -DCMAKE_PREFIX_PATH, CMake sẽ thử luôn biến môi trường Qt6_DIR (nếu có)
+# trước khi báo lỗi, thay vì lúc nào cũng phải gõ lại đường dẫn.
+if(NOT DEFINED CMAKE_PREFIX_PATH AND DEFINED ENV{Qt6_DIR})
+    set(CMAKE_PREFIX_PATH "$ENV{Qt6_DIR}")
+endif()
 set(Qt6_DIR
     "C:/Qt/6.11.2/msvc2022_64/lib/cmake/Qt6"
 )
-
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 add_subdirectory(libs/common)

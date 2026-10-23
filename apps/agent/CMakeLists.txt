@@ -12,8 +12,6 @@
 # để biết chi tiết từng thay đổi.
 # ------------------------------------------------------------------
 
-cmake_minimum_required(VERSION 3.28)
-
 add_executable(JustInTime WIN32
         # ---- shared/ : dùng chung bởi cả vai trò agent (con) và parent,
         # RIÊNG của app này - không nhầm với libs/common (xem đầu file đó
@@ -78,10 +76,6 @@ add_executable(JustInTime WIN32
         # ---- parent/ : vai trò "phụ huynh" (xem dữ liệu con + đặt giới hạn) ----
         "include/parent/parentpage.h"
         src/parent/parentpage.cpp
-)
-
-set(Qt6_DIR
-    "C:/Qt/6.11.2/msvc2022_64/lib/cmake/Qt6"
 )
 
 target_include_directories(JustInTime PRIVATE

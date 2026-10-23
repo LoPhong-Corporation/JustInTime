@@ -1,8 +1,10 @@
 //
 // mainwindow.h
-// Cửa sổ chính: sidebar điều hướng (thay <nav> trong index.html) + vùng
-// nội dung QStackedWidget (thay các <section id="view-...">) + thanh trên
-// cùng hiện trạng thái đăng nhập.
+// Cửa sổ chính, theo layout chuẩn 5 vùng (xem chú thích đầu mainwindow.cpp
+// cho sơ đồ ASCII + lý do ghép từng trang vào từng vùng):
+//   left rail (LeftRail) - sidebar (MachinesSidebar) - tabs (QTabWidget,
+//   nội dung đổi theo rail) - right panel (RightPanel) - bottom bar
+//   (QStatusBar, kế thừa từ QMainWindow).
 //
 #ifndef UI_MAINWINDOW_H
 #define UI_MAINWINDOW_H
@@ -13,15 +15,16 @@
 
 #include <QMainWindow>
 #include <memory>
+#include <vector>
 
-class QListWidget;
-class QStackedWidget;
-class QLabel;
-class QPushButton;
+class QTabWidget;
 class QTimer;
 
 namespace jit::dash::ui {
 
+class LeftRail;
+class MachinesSidebar;
+class RightPanel;
 class OverviewPage;
 class CpuPage;
 class RamPage;
@@ -37,20 +40,20 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(Config cfg, std::unique_ptr<LocalDB> db);
 
-    // Chuyển sang trang thứ `row` trong sidebar (0=Overview..8=Family).
-    // Dùng cho test tự động (screenshot driver) - cũng tiện nếu sau này
-    // cần "deep link" mở thẳng 1 trang từ dòng lệnh/tray.
-    void selectPage(int row);
+    // Chuyển sang khu vực rail thứ `index` (0=Home..3=Family) - dùng cho
+    // test tự động (screenshot driver) và tiện nếu sau này cần "deep
+    // link" mở thẳng 1 khu vực từ dòng lệnh/tray.
+    void selectSection(int index);
 
 private:
     Config cfg_;
     std::unique_ptr<LocalDB> db_;
     Collector collector_;
 
-    QListWidget* sidebar_;
-    QStackedWidget* stack_;
-    QLabel* sessionLabel_;
-    QPushButton* loginBtn_;
+    LeftRail* rail_;
+    MachinesSidebar* sidebar_;
+    QTabWidget* centerTabs_;
+    RightPanel* rightPanel_;
     QTimer* liveTimer_;
     QTimer* heartbeatTimer_;
 
@@ -64,10 +67,18 @@ private:
     DevicesPage* devicesPage_;
     FamilyPage* familyPage_;
 
+    // 1 "section" = 1 icon trên rail = N tab trong centerTabs_. Lưu con
+    // trỏ + nhãn tab để populate lại centerTabs_ mỗi lần đổi section
+    // (QTabWidget không sở hữu/huỷ widget khi removeTab(), nên đổi qua
+    // lại không mất trạng thái từng trang - xem buildSections()).
+    struct Section { std::vector<QWidget*> pages; std::vector<QString> labels; };
+    std::vector<Section> sections_;
+
     void buildUi();
-    void updateSessionLabel();
-    void onSidebarRowChanged(int row);
-    void onLoginLogoutClicked();
+    void buildSections();
+    void showSection(int index);
+    void updateAccountGlyph();
+    void onAccountClicked();
     void openSettings();
     void exportCsv();
     void printReport();

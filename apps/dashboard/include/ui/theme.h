@@ -50,6 +50,23 @@ inline QString darkThemeStyleSheet()
         QStatusBar { background:#0a1420; color:#7e9ac0; }
         QMenu { background:#132436; color:#eef4fb; border:1px solid #1c3a5e; }
         QMenu::item:selected { background:#1c3a5e; }
+
+        /* Layout 5 vùng: left rail / sidebar / tabs+main / right panel /
+         * bottom bar - xem mainwindow.cpp. */
+        #leftRail { background:#0a1420; border-right:1px solid #1c3a5e; }
+        #railButton, #railAccountButton {
+            background:transparent; border:1px solid transparent; border-radius:8px;
+            font-size:17px; padding:0;
+        }
+        #railButton:hover, #railAccountButton:hover { background:#132436; }
+        #railButton:checked { background:#1c3a5e; border:1px solid #5aa9ff; }
+
+        #machinesSidebar { background:#060c16; border-right:1px solid #1c3a5e; }
+        #rightPanel { background:#060c16; border-left:1px solid #1c3a5e; }
+        #panelHeading { color:#7e9ac0; font-size:11px; font-weight:700; letter-spacing:0.5px; }
+        #snapshotCard {
+            background:#0f1c2e; border:1px solid #1c3a5e; border-radius:8px; padding:10px;
+        }
     )";
 }
 

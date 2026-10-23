@@ -91,7 +91,28 @@ void DevicesPage::loadDevices()
                 item->setData(Qt::UserRole, QString::fromStdString(m.deviceId));
                 deviceList_->addItem(item);
             }
+
+            if (!pendingSelectDeviceId_.isEmpty())
+            {
+                const QString want = pendingSelectDeviceId_;
+                pendingSelectDeviceId_.clear();
+                for (int i = 0; i < deviceList_->count(); i++)
+                {
+                    if (deviceList_->item(i)->data(Qt::UserRole).toString() == want)
+                    {
+                        deviceList_->setCurrentRow(i);
+                        selectDevice(want);
+                        break;
+                    }
+                }
+            }
         });
+}
+
+void DevicesPage::selectDeviceById(const QString& deviceId)
+{
+    pendingSelectDeviceId_ = deviceId;
+    refresh(); // tải lại danh sách rồi tự áp dụng pendingSelectDeviceId_ ở trên
 }
 
 void DevicesPage::selectDevice(const QString& deviceId)

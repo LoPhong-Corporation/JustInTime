@@ -24,6 +24,12 @@ public:
     DevicesPage(Config cfg, Collector* collector, QWidget* parent = nullptr);
     void refresh();
 
+    // Chọn sẵn 1 thiết bị theo device_id - dùng khi điều hướng từ
+    // MachinesSidebar (bấm 1 máy ở sidebar -> nhảy sang đây, chọn sẵn
+    // khung chat với máy đó). Nếu danh sách chưa tải xong hoặc không có
+    // thiết bị khớp, chỉ ghi nhớ để áp dụng ngay khi loadDevices() xong.
+    void selectDeviceById(const QString& deviceId);
+
 private:
     Config cfg_;
     Collector* collector_;
@@ -34,6 +40,7 @@ private:
     QPushButton* sendBtn_;
     QPushButton* shareStatsBtn_;
     QString selectedDevice_;
+    QString pendingSelectDeviceId_; // chờ loadDevices() xong rồi mới áp dụng
 
     void loadDevices();
     void selectDevice(const QString& deviceId);

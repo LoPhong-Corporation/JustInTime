@@ -1,13 +1,14 @@
 //
 // overviewpage.h
-// Thay #view-overview trong index.html: fleet status, period picker +
-// timeline hoạt động, danh sách machines, 4 stat-card (CPU/RAM/Disk/Net) +
-// sparkline, biểu đồ lịch sử hiệu năng, Recent Alerts, Top Processes,
-// Agent status, Quick Actions, thông tin máy/ổ đĩa.
+// Tab "Overview" trong khu vực Home. Period picker + timeline hoạt động,
+// 4 stat-card (CPU/RAM/Disk/Network) + sparkline, biểu đồ lịch sử hiệu
+// năng, Quick Actions (Export/Print).
 //
-// KHÔNG có: AI Insights + Chatbot (2 khối cuối #view-local trong bản gốc
-// thực ra nằm ở trang Local, không phải Overview - và bị bỏ vì aiinsights
-// chưa cổng hoá, xem localpage.h).
+// Fleet status, danh sách Machines, Recent Alerts, Top Processes, thông
+// tin máy đã CHUYỂN sang MachinesSidebar/RightPanel (xem
+// include/ui/machinessidebar.h, include/ui/rightpanel.h) - hiện xuyên
+// suốt mọi tab thay vì chỉ ở Overview, theo layout rail/sidebar/tabs/
+// main/right-panel chuẩn.
 //
 #ifndef UI_PAGES_OVERVIEWPAGE_H
 #define UI_PAGES_OVERVIEWPAGE_H
@@ -16,16 +17,13 @@
 #include "localdb.h"
 #include "sysstats.h"
 #include "ui/chartwidget.h"
-#include "ui/gaugewidget.h"
 #include "ui/timelinewidget.h"
 
 #include <QWidget>
 #include <functional>
 
 class QLabel;
-class QTableWidget;
 class QPushButton;
-class QListWidget;
 class QScrollArea;
 
 namespace jit::dash::ui {
@@ -33,33 +31,23 @@ namespace jit::dash::ui {
 class OverviewPage : public QWidget
 {
 public:
-    // callbacks: điều hướng sang trang khác từ nút Quick Action (Family/Devices/Settings).
     struct Callbacks {
-        std::function<void()> openFamily, openDevices, openSettings, exportCsv, printReport;
+        std::function<void()> exportCsv, printReport;
     };
 
     OverviewPage(Config cfg, LocalDB* db, Collector* collector, Callbacks cb, QWidget* parent = nullptr);
 
-    // Gọi mỗi ~1 giây bởi MainWindow (dùng chung 1 QTimer cho mọi trang cần live update).
-    void tick();
-
-    // Gọi 1 lần sau khi trang đã hiện lần đầu (period/machines/processes - có
-    // gọi mạng nên phải qua runAsync, và runAsync không được gọi trước
-    // app.exec() - xem asyncutil.h).
-    void refreshAll();
+    void tick();        // mỗi ~1 giây (chỉ khi tab này đang hiện - MainWindow tự quyết định khi nào gọi)
+    void refreshAll();  // gọi 1 lần khi tab hiện lần đầu / period đổi
 
 private:
     Config cfg_;
-    LocalDB* db_; // có thể nullptr (chưa có DB agent) - các phần liên quan tự ẩn
+    LocalDB* db_;
     Collector* collector_;
     Callbacks cb_;
 
-    // Fleet
-    QLabel *fleetOnline_, *fleetOffline_, *fleetWarning_, *fleetCritical_;
-
-    // Period + timeline
     QString currentPeriod_ = "today";
-    QPushButton* periodButtons_[5]; // today, yesterday, this_week, last_week, custom
+    QPushButton* periodButtons_[5];
     TimelineStrip* timelineStrip_;
     TimelineLegend* timelineLegend_;
     DailyBarsWidget* dailyBars_;
@@ -69,34 +57,15 @@ private:
     double timelineZoom_ = 1.0;
     QLabel* timelineZoomLabel_;
 
-    // Machines
-    QListWidget* machinesList_;
-
-    // Stat cards
     ChartWidget *sparkCpu_, *sparkRam_, *sparkDisk_, *sparkNet_;
     QLabel *cpuPercentLbl_, *ramPercentLbl_, *diskPercentLbl_, *netPercentLbl_;
     QLabel *cpuSubtitleLbl_, *ramSubtitleLbl_, *diskSubtitleLbl_, *netSubtitleLbl_;
 
-    // History chart (multi-series: CPU/RAM/Disk %)
     ChartWidget* historyChart_;
-
-    // Alerts
-    QListWidget* alertsList_;
-    bool prevAlert_[3] = {false, false, false}; // cpu, ram, disk - phát hiện cạnh lên để ghi log alert
-
-    // Processes
-    QTableWidget* processTable_;
-
-    // Machine info
-    QLabel *machineInfoLeft_, *machineInfoDisks_;
-    bool machineInfoLoaded_ = false;
 
     void buildUi();
     void setPeriod(const QString& period);
     void loadPeriodAndTimeline();
-    void loadMachines();
-    void loadProcesses();
-    void loadMachineInfoOnce();
     void applyLiveStats(const LiveStats& live);
 };
 

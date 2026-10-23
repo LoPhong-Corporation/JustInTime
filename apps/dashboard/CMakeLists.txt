@@ -25,6 +25,12 @@ add_executable(JustInTimeDashboard WIN32
 
         include/ui/asyncutil.h
         include/ui/theme.h
+        include/ui/leftrail.h
+        src/ui/leftrail.cpp
+        include/ui/machinessidebar.h
+        src/ui/machinessidebar.cpp
+        include/ui/rightpanel.h
+        src/ui/rightpanel.cpp
         include/ui/chartwidget.h
         src/ui/chartwidget.cpp
         include/ui/gaugewidget.h

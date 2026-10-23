@@ -1,5 +1,37 @@
+//
+// mainwindow.cpp
+//
+// Layout 5 vùng chuẩn (rail / sidebar / tabs+main / right panel / bottom
+// bar), theo đúng wireframe người dùng cung cấp:
+//
+//   ┌───┬──────────┬──────────────────────────────┬──────────┐
+//   │ 🏠│ [filter] │ Overview │ CPU │ RAM │ ...     │ Alerts   │
+//   │ 🔍│ ○ MachA  │ ──────────────────────────────│ ...      │
+//   │ 🔔│ ○ MachB  │   (nội dung tab đang chọn)     │ Snapshot │
+//   │ 📄│ ○ MachC  │                                │ [box]    │
+//   │   │          │                                │ Procs    │
+//   │ ⚙ │          │                                │ ...      │
+//   │ 👤│          │                                │          │
+//   ├───┴──────────┴──────────────────────────────┴──────────┤
+//   │ bottom bar (QStatusBar - kế thừa từ QMainWindow)         │
+//   └───────────────────────────────────────────────────────┘
+//
+// 5 icon rail ánh xạ 9 trang cũ thành 4 khu vực nội dung (mỗi khu vực = 1
+// hoặc nhiều tab trong centerTabs_) + 2 nút không phải khu vực nội dung
+// (Settings mở dialog, Account bật/tắt đăng nhập):
+//   🏠 Home     -> Overview, CPU, RAM, Disk, Network  (giám sát hệ thống)
+//   🔍 Activity -> Local Activity, Cloud Data          (tra cứu lịch sử)
+//   🔔 Devices  -> Devices                             (nhắn tin thiết bị)
+//   📄 Family   -> Family                               (quản lý gia đình)
+//
+// Glyph dùng ký tự Unicode/emoji thay vì file .ico/.svg - không cần thêm
+// resource/asset nào, vẫn hiện đúng trên Windows (Segoe UI Emoji có sẵn).
+//
 #include "ui/mainwindow.h"
 #include "ui/asyncutil.h"
+#include "ui/leftrail.h"
+#include "ui/machinessidebar.h"
+#include "ui/rightpanel.h"
 #include "ui/logindialog.h"
 #include "ui/settingsdialog.h"
 #include "ui/pages/overviewpage.h"
@@ -13,12 +45,9 @@
 
 #include <QFileDialog>
 #include <QHBoxLayout>
-#include <QLabel>
-#include <QListWidget>
 #include <QMessageBox>
-#include <QPushButton>
-#include <QStackedWidget>
 #include <QStatusBar>
+#include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -30,7 +59,7 @@ MainWindow::MainWindow(Config cfg, std::unique_ptr<LocalDB> db)
     : cfg_(std::move(cfg)), db_(std::move(db))
 {
     setWindowTitle("JustInTime Dashboard");
-    resize(1180, 780);
+    resize(1280, 800);
     buildUi();
 
     liveTimer_ = new QTimer(this);
@@ -40,11 +69,10 @@ MainWindow::MainWindow(Config cfg, std::unique_ptr<LocalDB> db)
         ramPage_->tick();
         diskPage_->tick();
         networkPage_->tick();
+        rightPanel_->tick(); // luôn chạy, bất kể đang xem khu vực nào
     });
     liveTimer_->start(1000);
 
-    // Đẩy heartbeat lên cloud mỗi 30s - CHỈ khi đã đăng nhập (bên trong tự
-    // kiểm tra) - giữ song song với agent, không thay thế.
     heartbeatTimer_ = new QTimer(this);
     connect(heartbeatTimer_, &QTimer::timeout, this, &MainWindow::pushHeartbeat);
     heartbeatTimer_->start(30000);
@@ -56,65 +84,58 @@ MainWindow::MainWindow(Config cfg, std::unique_ptr<LocalDB> db)
         cpuPage_->refreshStaticInfo();
         networkPage_->refreshInterfacesOnce();
         localPage_->refresh();
-        updateSessionLabel();
+        rightPanel_->refreshStaticInfoOnce();
+        rightPanel_->refreshProcesses();
+        sidebar_->refresh();
+        updateAccountGlyph();
         pushHeartbeat();
     });
+
+    // Top Processes (right panel) đổi chậm hơn CPU/RAM live - làm mới mỗi
+    // 5 giây là đủ mượt mà không tốn CreateToolhelp32Snapshot() mỗi giây.
+    auto* procTimer = new QTimer(this);
+    connect(procTimer, &QTimer::timeout, this, [this] { rightPanel_->refreshProcesses(); });
+    procTimer->start(5000);
 }
 
 void MainWindow::buildUi()
 {
     auto* central = new QWidget;
-    auto* rootLayout = new QVBoxLayout(central);
-    rootLayout->setContentsMargins(0, 0, 0, 0);
-    rootLayout->setSpacing(0);
-
-    // ------------------------------------------------------------- Top bar --
-    auto* topBar = new QWidget;
-    topBar->setStyleSheet("background:#0a1420; border-bottom:1px solid #1c3a5e;");
-    auto* topLayout = new QHBoxLayout(topBar);
-    auto* title = new QLabel("JustInTime");
-    title->setStyleSheet("color:#eef4fb; font-weight:700; font-size:14px; padding:4px 8px;");
-    topLayout->addWidget(title);
-    topLayout->addStretch();
-
-    sessionLabel_ = new QLabel("Not logged in");
-    sessionLabel_->setStyleSheet("color:#7e9ac0;");
-    topLayout->addWidget(sessionLabel_);
-
-    loginBtn_ = new QPushButton("Log In");
-    connect(loginBtn_, &QPushButton::clicked, this, &MainWindow::onLoginLogoutClicked);
-    topLayout->addWidget(loginBtn_);
-
-    auto* settingsBtn = new QPushButton("Settings");
-    connect(settingsBtn, &QPushButton::clicked, this, &MainWindow::openSettings);
-    topLayout->addWidget(settingsBtn);
-
-    rootLayout->addWidget(topBar);
-
-    // --------------------------------------------------------------- Body --
-    auto* body = new QHBoxLayout;
+    auto* body = new QHBoxLayout(central);
     body->setContentsMargins(0, 0, 0, 0);
     body->setSpacing(0);
 
-    sidebar_ = new QListWidget;
-    sidebar_->setObjectName("sidebarList");
-    sidebar_->setFixedWidth(180);
-    sidebar_->setStyleSheet(
-        "QListWidget { background:#0a1420; border:none; border-right:1px solid #1c3a5e; color:#dce8f7; }"
-        "QListWidget::item { padding:10px 14px; }"
-        "QListWidget::item:selected { background:#132436; color:#eef4fb; border-left:3px solid #5aa9ff; }");
-    for (const char* label : {"Overview", "CPU", "RAM", "Disk", "Network", "Local Activity", "Cloud Data", "Devices", "Family"})
-        sidebar_->addItem(label);
-    connect(sidebar_, &QListWidget::currentRowChanged, this, &MainWindow::onSidebarRowChanged);
+    // ---------------------------------------------------------- Left rail --
+    rail_ = new LeftRail;
+    rail_->addSection("🏠", "Home - system monitoring");
+    rail_->addSection("🔍", "Activity - local & cloud history");
+    rail_->addSection("🔔", "Devices - messages between your machines");
+    rail_->addSection("📄", "Family - parental controls");
+    rail_->onSectionSelected = [this](int index) { showSection(index); };
+    rail_->onSettingsClicked = [this] { openSettings(); };
+    rail_->onAccountClicked = [this] { onAccountClicked(); };
+    body->addWidget(rail_);
+
+    // -------------------------------------------------------------- Sidebar --
+    sidebar_ = new MachinesSidebar(cfg_);
+    sidebar_->onMachineSelected = [this](QString deviceId) {
+        rail_->setCurrentIndex(2); // Devices
+        showSection(2);
+        devicesPage_->selectDeviceById(deviceId);
+    };
     body->addWidget(sidebar_);
 
-    stack_ = new QStackedWidget;
-    stack_->setStyleSheet("background:#000000;");
+    // --------------------------------------------------------- Tabs + main --
+    centerTabs_ = new QTabWidget;
+    centerTabs_->setObjectName("centerTabs");
+    centerTabs_->setDocumentMode(true);
+    body->addWidget(centerTabs_, 1);
+
+    // ---------------------------------------------------------- Right panel --
+    rightPanel_ = new RightPanel(&collector_);
+    body->addWidget(rightPanel_);
 
     OverviewPage::Callbacks cb;
-    cb.openFamily = [this] { sidebar_->setCurrentRow(8); };
-    cb.openDevices = [this] { sidebar_->setCurrentRow(7); };
-    cb.openSettings = [this] { openSettings(); };
     cb.exportCsv = [this] { exportCsv(); };
     cb.printReport = [this] { printReport(); };
 
@@ -128,60 +149,80 @@ void MainWindow::buildUi()
     devicesPage_ = new DevicesPage(cfg_, &collector_);
     familyPage_ = new FamilyPage;
 
-    for (QWidget* p : {static_cast<QWidget*>(overviewPage_), static_cast<QWidget*>(cpuPage_), static_cast<QWidget*>(ramPage_),
-                        static_cast<QWidget*>(diskPage_), static_cast<QWidget*>(networkPage_), static_cast<QWidget*>(localPage_),
-                        static_cast<QWidget*>(cloudPage_), static_cast<QWidget*>(devicesPage_), static_cast<QWidget*>(familyPage_)})
-        stack_->addWidget(p);
-
-    body->addWidget(stack_, 1);
-    rootLayout->addLayout(body, 1);
+    buildSections();
 
     setCentralWidget(central);
-    sidebar_->setCurrentRow(0);
+    showSection(0);
     statusBar()->showMessage(QString("Device: %1").arg(QString::fromStdString(cfg_.displayLabel())));
 }
 
-void MainWindow::selectPage(int row) { sidebar_->setCurrentRow(row); }
-
-void MainWindow::onSidebarRowChanged(int row)
+void MainWindow::buildSections()
 {
-    stack_->setCurrentIndex(row);
-    // Mỗi lần chuyển sang 1 trang cần dữ liệu mạng, tải lại - khớp hành vi
-    // "mỗi lần chuyển tab thì fetch lại" của dashboard.js gốc.
-    switch (row)
+    sections_.resize(4);
+    sections_[0] = {{overviewPage_, cpuPage_, ramPage_, diskPage_, networkPage_},
+                     {"Overview", "CPU", "RAM", "Disk", "Network"}};
+    sections_[1] = {{localPage_, cloudPage_}, {"Local Activity", "Cloud Data"}};
+    sections_[2] = {{devicesPage_}, {"Devices"}};
+    sections_[3] = {{familyPage_}, {"Family"}};
+}
+
+void MainWindow::showSection(int index)
+{
+    if (index < 0 || index >= static_cast<int>(sections_.size()))
+        return;
+
+    // QTabWidget::clear() KHÔNG xoá/huỷ các widget trang (chỉ gỡ khỏi tab
+    // bar) - an toàn để chuyển 1 trang qua lại giữa các lần showSection()
+    // mà không mất trạng thái (vị trí cuộn, dữ liệu đã tải...).
+    centerTabs_->clear();
+
+    const Section& s = sections_[static_cast<size_t>(index)];
+    for (size_t i = 0; i < s.pages.size(); i++)
+        centerTabs_->addTab(s.pages[i], s.labels[i]);
+
+    // Mỗi lần vào 1 khu vực cần dữ liệu mạng, tải lại - khớp hành vi "mỗi
+    // lần chuyển tab thì fetch lại" của dashboard.js gốc.
+    switch (index)
     {
-        case 5: localPage_->refresh(); break;
-        case 6: cloudPage_->refresh(); break;
-        case 7: devicesPage_->refresh(); break;
-        case 8: familyPage_->refresh(); break;
+        case 1: localPage_->refresh(); cloudPage_->refresh(); break;
+        case 2: devicesPage_->refresh(); break;
+        case 3: familyPage_->refresh(); break;
         default: break;
     }
 }
 
-void MainWindow::updateSessionLabel()
+void MainWindow::selectSection(int index)
+{
+    rail_->setCurrentIndex(index);
+    showSection(index);
+}
+
+void MainWindow::updateAccountGlyph()
 {
     const auto sess = loadDashSession();
-    if (sess)
+    if (sess && !sess->email.empty())
     {
-        sessionLabel_->setText(QString::fromStdString(sess->email));
-        loginBtn_->setText("Log Out");
+        const QString initial = QString::fromStdString(sess->email).left(1).toUpper();
+        rail_->setAccountGlyph(initial, QString::fromStdString(sess->email) + " (click to log out)");
     }
     else
     {
-        sessionLabel_->setText("Not logged in");
-        loginBtn_->setText("Log In");
+        rail_->setAccountGlyph("👤", "Not logged in (click to log in)");
     }
 }
 
-void MainWindow::onLoginLogoutClicked()
+void MainWindow::onAccountClicked()
 {
     if (loadDashSession())
     {
+        if (QMessageBox::question(this, "Log Out", "Log out of this account?") != QMessageBox::Yes)
+            return;
         clearDashSession();
-        updateSessionLabel();
+        updateAccountGlyph();
         cloudPage_->refresh();
         devicesPage_->refresh();
         familyPage_->refresh();
+        sidebar_->refresh();
         return;
     }
 
@@ -190,11 +231,12 @@ void MainWindow::onLoginLogoutClicked()
     {
         const cloud::Session s = dlg.session();
         saveDashSession({s.accessToken, s.refreshToken, s.userId, s.email});
-        updateSessionLabel();
+        updateAccountGlyph();
         overviewPage_->refreshAll();
         cloudPage_->refresh();
         devicesPage_->refresh();
         familyPage_->refresh();
+        sidebar_->refresh();
         pushHeartbeat();
     }
 }
@@ -202,9 +244,9 @@ void MainWindow::onLoginLogoutClicked()
 void MainWindow::openSettings()
 {
     const bool loggedIn = loadDashSession().has_value();
-    SettingsDialog dlg(loggedIn, [this] { updateSessionLabel(); }, this);
+    SettingsDialog dlg(loggedIn, [this] { updateAccountGlyph(); }, this);
     dlg.exec();
-    updateSessionLabel();
+    updateAccountGlyph();
 }
 
 void MainWindow::pushHeartbeat()
@@ -254,7 +296,8 @@ void MainWindow::exportCsv()
 
 void MainWindow::printReport()
 {
-    sidebar_->setCurrentRow(6); // trang Cloud Data đã có sẵn bảng tổng + gần đây;
+    selectSection(1);
+    centerTabs_->setCurrentIndex(1); // Cloud Data
     QMessageBox::information(this, "Print Report",
         "Use your browser-free print: right-click the Cloud Data tables, or export CSV and open it in Excel/Sheets to print.\n\n"
         "(A dedicated print-preview dialog was not carried over from report_print.html in this pass.)");

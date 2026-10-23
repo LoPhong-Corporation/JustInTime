@@ -293,7 +293,7 @@ std::vector<ProcessInfo> getProcesses(int limit)
                     if (it != s_prev.end() && elapsedSec > 0)
                     {
                         const double usedSec = static_cast<double>((k - it->second.kernel) + (u - it->second.user)) / 1e7;
-                        p.cpuPercent = round1(std::max(0.0, usedSec / elapsedSec * 100.0));
+                        p.cpuPercent = round1((std::max)(0.0, usedSec / elapsedSec * 100.0));
                     }
                 }
 
@@ -421,7 +421,7 @@ LiveStats Collector::live()
         const double commitLimit = static_cast<double>(perf.CommitLimit) * pageSize;
         const double physTotal = static_cast<double>(mem.ullTotalPhys);
 
-        const double swapTotal = std::max(0.0, commitLimit - physTotal);
+        const double swapTotal = (std::max)(0.0, commitLimit - physTotal);
         const double swapUsed = std::clamp(commitTotal - physTotal, 0.0, swapTotal);
 
         s.swapTotalGB = round2(swapTotal / kGB);
