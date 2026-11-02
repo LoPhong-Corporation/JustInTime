@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thời Gian Máy – Theo dõi thời gian dùng máy tính</title>
+<style>
+:root{--bg:#eef1f4;--win:#f8f9fb;--surf:#fff;--txt:#17202a;--mut:#667180;--line:#e1e5ea;--acc:#0b7a75;--accs:#dff3f1;--warn:#c8431f;--c1:#0b7a75;--c2:#3b6fd4;--c3:#e0a21b;--c4:#c8431f;--c5:#8a63c9;--c6:#7b8794;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1316;--win:#171c21;--surf:#1f262c;--txt:#e8edf2;--mut:#93a0ad;--line:#2b343c;--acc:#3cc3bb;--accs:#17383a;--warn:#ff7a52;--c1:#3cc3bb;--c2:#6e9bf0;--c3:#f0bd4a;--c4:#ff7a52;--c5:#b393ea;--c6:#97a3b0}}
+:root[data-theme="dark"]{--bg:#0f1316;--win:#171c21;--surf:#1f262c;--txt:#e8edf2;--mut:#93a0ad;--line:#2b343c;--acc:#3cc3bb;--accs:#17383a;--warn:#ff7a52;--c1:#3cc3bb;--c2:#6e9bf0;--c3:#f0bd4a;--c4:#ff7a52;--c5:#b393ea;--c6:#97a3b0}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font:14px/1.45 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:0}
+button,input,select{font:inherit;color:inherit}
+.win{width:100%;height:100%;background:var(--win);overflow:hidden;display:flex;flex-direction:column}
+.title{height:38px;display:flex;align-items:center;justify-content:space-between;padding-left:14px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line);flex:none}
+.title b{color:var(--txt);font-weight:600;display:flex;gap:8px;align-items:center}
+.logo{width:16px;height:16px;border-radius:5px;background:conic-gradient(var(--acc) 0 70%,var(--line) 0)}
+.wc{display:flex;height:100%}
+.wc span{width:44px;display:grid;place-items:center;cursor:default}
+.wc span:hover{background:var(--line)}
+.wc span:last-child:hover{background:#c42b1c;color:#fff}
+.body{flex:1;display:flex;min-height:0}
+nav{width:200px;padding:10px 8px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px;flex:none}
+nav button{display:flex;gap:10px;align-items:center;border:0;background:none;padding:9px 12px;border-radius:6px;cursor:pointer;text-align:left;position:relative}
+nav button:hover{background:var(--line)}
+nav button.on{background:var(--surf);font-weight:600}
+nav button.on::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:2px;background:var(--acc)}
+nav .sp{flex:1}
+main{flex:1;overflow:auto;padding:22px 26px}
+h1{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.sub{color:var(--mut);margin:2px 0 18px}
+.grid{display:grid;gap:14px}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:8px;padding:16px}
+.card h3{font-size:13px;font-weight:600;color:var(--mut);margin-bottom:12px}
+.hero{grid-template-columns:minmax(260px,320px) 1fr}
+.ring{width:190px;height:190px;border-radius:50%;margin:4px auto 10px;display:grid;place-items:center;background:conic-gradient(var(--acc) var(--p),var(--line) 0)}
+.ring div{width:150px;height:150px;border-radius:50%;background:var(--surf);display:grid;place-content:center;text-align:center}
+.ring strong{font-size:30px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.ring small{color:var(--mut)}
+.live{display:flex;gap:8px;align-items:center;justify-content:center;font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;background:#2fb344;animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media(prefers-reduced-motion:reduce){.dot{animation:none}}
+.stats{grid-template-columns:repeat(3,1fr)}
+.stat b{display:block;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat span{color:var(--mut);font-size:12px}
+.stat em{font-style:normal;font-size:12px;color:var(--acc)}
+.two{grid-template-columns:1.4fr 1fr;margin-top:14px}
+.bars{display:flex;align-items:flex-end;gap:10px;height:150px}
+.bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%;font-size:12px;color:var(--mut)}
+.bar i{width:100%;max-width:38px;background:var(--line);border-radius:5px 5px 2px 2px;display:block}
+.bar.today i{background:var(--acc)}
+.bar.today{color:var(--txt);font-weight:600}
+.row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:7px 0}
+.ic{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:#fff;font-weight:600;font-size:12px}
+.meter{height:6px;border-radius:3px;background:var(--line);margin-top:4px;overflow:hidden}
+.meter i{display:block;height:100%;border-radius:3px}
+.t{font-variant-numeric:tabular-nums;color:var(--mut);font-size:13px}
+.donut{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.dn{width:120px;height:120px;border-radius:50%;flex:none}
+.dn::after{content:"";display:block;width:70px;height:70px;border-radius:50%;background:var(--surf);margin:25px}
+.lg div{display:flex;gap:8px;align-items:center;font-size:13px;padding:2px 0}
+.lg i{width:10px;height:10px;border-radius:3px}
+.btn{border:1px solid var(--line);background:var(--surf);border-radius:6px;padding:7px 14px;cursor:pointer}
+.btn:hover{background:var(--line)}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.p:hover{filter:brightness(1.08);background:var(--acc)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.p{color:#06201f}}:root[data-theme="dark"] .btn.p{color:#06201f}
+.focus{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;flex-wrap:wrap}
+.focus big{font-size:26px;font-variant-numeric:tabular-nums;font-weight:600}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:600;color:var(--mut);font-size:12px;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line)}
+tr:last-child td{border:0}
+.tw{overflow-x:auto}
+.heat{display:grid;grid-template-columns:repeat(24,1fr);gap:3px}
+.heat i{aspect-ratio:1;border-radius:3px;background:var(--acc)}
+.hl{display:flex;justify-content:space-between;color:var(--mut);font-size:11px;margin-top:5px}
+.sw{position:relative;width:40px;height:20px;flex:none}
+.sw input{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1;width:100%;height:100%}
+.sw b{position:absolute;inset:0;border-radius:10px;border:1px solid var(--mut);transition:.15s}
+.sw b::after{content:"";position:absolute;left:4px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--mut);transition:.15s}
+.sw input:checked+b{background:var(--acc);border-color:var(--acc)}
+.sw input:checked+b::after{left:23px;background:#fff}
+.sw input:focus-visible+b,.btn:focus-visible,nav button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.lim{display:grid;grid-template-columns:1fr auto;gap:6px 16px;align-items:center}
+.lim input[type=range]{grid-column:1/3;accent-color:var(--acc);width:100%}
+.set{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}
+.set:last-child{border:0}
+.set small{display:block;color:var(--mut)}
+select{background:var(--surf);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+[data-open]{cursor:pointer}.row[data-open]:hover,tr[data-open]:hover{background:var(--win)}.row[data-open]{border-radius:6px;padding-left:6px;padding-right:6px}
+.back{border:0;background:none;color:var(--acc);cursor:pointer;padding:4px 0;margin-bottom:10px;font-weight:600}
+.ah{display:flex;gap:14px;align-items:center;margin-bottom:18px;flex-wrap:wrap}.ah h1{line-height:1.2}.ah .st{margin-left:auto;display:flex;gap:8px;align-items:center;color:var(--mut)}.off{width:8px;height:8px;border-radius:50%;background:var(--mut)}
+.kv{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line)}.kv:last-child{border:0}.kv span:last-child{text-align:right;word-break:break-all}
+.win{position:relative}
+.auth{position:absolute;left:0;right:0;bottom:0;top:0;background:var(--win);z-index:4;align-items:center;justify-content:center;padding:16px;overflow:auto;display:none}
+.ac{width:100%;max-width:400px;margin:auto}.ab{display:flex;gap:12px;align-items:center;margin-bottom:18px}
+.tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:14px}.tabs button{flex:1;border:0;background:none;padding:9px;cursor:pointer;border-bottom:2px solid transparent;color:var(--mut)}.tabs button.on{color:var(--txt);border-color:var(--acc);font-weight:600}
+.f{display:grid;gap:10px}.f label{display:grid;gap:4px;font-size:13px;color:var(--mut)}.f label.ck{display:flex;gap:8px;align-items:center}
+input[type=email],input[type=password],input[type=text],input[type=time]{background:var(--surf);border:1px solid var(--line);border-radius:6px;padding:8px 10px;color:var(--txt);width:100%}
+.err{color:var(--warn);min-height:18px;font-size:13px}
+.lk{border:0;background:none;color:var(--acc);cursor:pointer;padding:0;text-align:left}
+.qr{display:grid;grid-template-columns:repeat(21,1fr);width:168px;aspect-ratio:1;padding:8px;background:#fff;border-radius:8px;border:1px solid var(--line)}.qr i{background:#111}.qr i.w{background:#fff}
+.code{font-size:30px;font-weight:600;letter-spacing:.12em;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;background:var(--accs);color:var(--acc)}.chip.bad{background:transparent;border:1px solid var(--warn);color:var(--warn)}
+.dv{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.c2{display:grid;gap:14px;grid-template-columns:1fr 1fr;margin-top:14px;align-items:start}
+@media(max-width:820px){.c2{grid-template-columns:1fr}}
+@property --p{syntax:"<percentage>";inherits:false;initial-value:0%}
+.me{display:flex;gap:10px;align-items:center;padding:6px 10px 14px}.me b{font-size:14px}
+@media(max-width:820px){.me div{display:none}.me{justify-content:center;padding:6px 0 14px}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes grow{from{transform:scaleY(0)}}
+@keyframes fillx{from{transform:scaleX(0)}}
+@keyframes ringin{from{--p:0%}}
+@keyframes pop{from{opacity:0;transform:scale(.4)}}
+@keyframes scan{0%,100%{top:8px}50%{top:calc(100% - 11px)}}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes toastin{from{opacity:0;transform:translateX(26px)}}
+main.go>*{animation:rise .55s cubic-bezier(.2,.7,.2,1) backwards}
+main.go>*:nth-child(2){animation-delay:.05s}main.go>*:nth-child(3){animation-delay:.1s}main.go>*:nth-child(4){animation-delay:.15s}main.go>*:nth-child(5){animation-delay:.2s}main.go>*:nth-child(n+6){animation-delay:.25s}
+main.go .grid>.card,main.go .c2>.card,main.go .dv>.card{animation:rise .55s cubic-bezier(.2,.7,.2,1) .12s backwards}
+main.go .bar i{transform-origin:bottom;animation:grow .8s cubic-bezier(.2,.8,.2,1) .15s backwards}
+main.go .bar:nth-child(2) i{animation-delay:.2s}main.go .bar:nth-child(3) i{animation-delay:.25s}main.go .bar:nth-child(4) i{animation-delay:.3s}main.go .bar:nth-child(5) i{animation-delay:.35s}main.go .bar:nth-child(6) i{animation-delay:.4s}main.go .bar:nth-child(7) i{animation-delay:.45s}
+main.go .meter i{transform-origin:left;animation:fillx .9s cubic-bezier(.2,.8,.2,1) .25s backwards}
+main.go .ring{animation:ringin 1.2s cubic-bezier(.2,.8,.2,1) .1s backwards}
+main.go .heat i{animation:pop .45s ease-out .3s backwards}main.go .heat i:nth-child(3n){animation-delay:.4s}main.go .heat i:nth-child(3n+1){animation-delay:.5s}
+.ring{transition:--p 1s linear}
+.btn,nav button{transition:background-color .15s,transform .1s}.btn:active,nav button:active{transform:scale(.97)}
+nav button.on::before{animation:grow .3s ease-out}
+body,.win,.card,nav,.auth,.sw b,.sw b::after{transition:background-color .3s,color .3s,border-color .3s,left .15s}
+.toast.show{animation:toastin .3s cubic-bezier(.2,.8,.2,1)}
+.ac{animation:rise .6s cubic-bezier(.2,.7,.2,1) backwards}
+.err:not(:empty){animation:shake .35s}
+.qr{position:relative;overflow:hidden}.qr::after{content:"";position:absolute;left:0;right:0;top:8px;height:3px;background:var(--acc);box-shadow:0 0 12px var(--acc);animation:scan 2.2s ease-in-out infinite}
+#main .card:has(.qr){animation:rise .45s cubic-bezier(.2,.7,.2,1) backwards}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;transition:transform .2s}
+.ic .i{width:20px;height:20px}.btn .i{width:15px;height:15px;vertical-align:-2px;margin-right:6px}
+.chip .i{width:12px;height:12px;vertical-align:-1px;margin-right:4px}
+.bigi{display:grid;place-content:center;color:var(--mut)}.bigi .i{width:30px;height:30px}
+.lr{display:grid;gap:12px;align-content:start}.lh{display:flex;gap:10px;align-items:center}.lh .lm{flex:1;min-width:0}
+.lt{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:5px}
+.lc{border-top:1px solid var(--line);padding-top:12px;display:grid;gap:10px}.lrow{display:flex;justify-content:space-between;align-items:center}
+.pre{display:flex;gap:6px;flex-wrap:wrap}
+.pc{border:1px solid var(--line);background:var(--surf);border-radius:16px;padding:5px 13px;cursor:pointer;transition:background-color .15s,border-color .15s,transform .15s}
+.pc.on{background:var(--acc);border-color:var(--acc);color:#fff}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .pc.on{color:#06201f}}:root[data-theme="dark"] .pc.on{color:#06201f}
+.step{display:flex;align-items:center;justify-content:space-between;background:var(--win);border:1px solid var(--line);border-radius:8px;padding:4px}
+.step b{font-variant-numeric:tabular-nums}.step button{width:42px;height:34px;border:0;border-radius:6px;background:var(--surf);cursor:pointer;font-size:18px;transition:background-color .15s,transform .15s}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(hover:hover) and (prefers-reduced-motion:no-preference){
+.stats>.card,.dv>.card,.lr{transition:transform .25s cubic-bezier(.2,.7,.2,1),border-color .2s,box-shadow .25s}
+.stats>.card:hover,.dv>.card:hover{transform:translateY(-4px);border-color:var(--acc);box-shadow:0 12px 26px rgba(0,0,0,.1)}
+.c2>.card:hover,.hero .card:hover{border-color:var(--acc)}
+nav button:hover .i{transform:translateX(3px) scale(1.1)}
+.me:hover .logo{animation:spin .9s ease-in-out}
+.ic{transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
+.row[data-open]{transition:transform .2s,background-color .2s}.row[data-open]:hover{transform:translateX(5px)}
+.row:hover .ic,tr[data-open]:hover .ic,.lr:hover .ic,.dv>.card:hover>div>.ic{transform:rotate(-10deg) scale(1.12)}
+.bar i{transition:transform .2s,filter .2s}.bar:hover i{filter:brightness(1.2);transform:scaleX(1.18)}
+.heat i{transition:transform .15s}.heat i:hover{transform:scale(1.6);position:relative;z-index:1}
+.dn{transition:transform .6s cubic-bezier(.2,.8,.2,1)}.dn:hover{transform:rotate(25deg) scale(1.05)}
+.ring:hover{transform:scale(1.03)}.ring{transition:--p 1s linear,transform .3s}
+.lg div{transition:transform .15s}.lg div:hover{transform:translateX(4px)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.14)}
+.pc:hover{border-color:var(--acc);transform:translateY(-1px)}.step button:hover{background:var(--accs)}.step button:active,.pc:active{transform:scale(.92)}
+.sw:hover b{box-shadow:0 0 0 4px var(--accs)}
+.meter i{transition:width .5s cubic-bezier(.2,.8,.2,1),filter .2s}.meter:hover i{filter:brightness(1.15)}
+.chip{transition:transform .15s}.chip:hover{transform:translateY(-2px)}
+tr[data-open]{transition:background-color .2s}
+.back{transition:transform .2s}.back:hover{transform:translateX(-4px)}
+.tabs button{transition:color .2s,border-color .2s}.tabs button:hover{color:var(--txt)}
+}
+.kid{position:absolute;inset:0;z-index:3;background:var(--win);display:none;flex-direction:column;--acc:#2f6fed;--accs:#e2ebff}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .kid{--acc:#7fa6ff;--accs:#1b2a4d}}:root[data-theme="dark"] .kid{--acc:#7fa6ff;--accs:#1b2a4d}
+.kscroll{flex:1;overflow:auto}.kw{width:100%;max-width:1040px;margin:0 auto;padding:24px 26px 100px;display:grid;gap:16px}
+.kh{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.kh h1{font-size:28px}
+.kav{width:54px;height:54px;border-radius:50%;background:var(--accs);color:var(--acc);display:grid;place-items:center;font-size:24px;font-weight:700}
+.kg{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:16px}
+.kc{background:var(--surf);border:1px solid var(--line);border-radius:20px;padding:20px;transition:border-color .2s}.kc h3{font-size:14px;color:var(--mut);margin-bottom:12px;font-weight:600}
+.kh2{display:grid;gap:14px;justify-items:center;align-content:start;text-align:center}
+.kr{width:220px;height:220px;border-radius:50%;background:conic-gradient(var(--rc,var(--acc)) var(--p),var(--line) 0);display:grid;place-items:center;transition:--p 1s linear}
+.kr>div{width:178px;height:178px;border-radius:50%;background:var(--surf);display:grid;place-content:center;gap:2px}.kr strong{font-size:32px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.tile{display:grid;gap:8px;justify-items:start;text-align:left;padding:14px;border-radius:18px;border:1px solid var(--line);background:var(--win);cursor:pointer;transition:transform .2s,border-color .2s}
+.tile .ic{width:44px;height:44px;border-radius:12px;font-size:15px}.tile.lk{opacity:.65}.tile .t .i{width:13px;height:13px;vertical-align:-2px;margin-right:4px}.tile .meter{width:100%}
+.tlw{padding-top:4px}.tl{position:relative;height:20px;border-radius:10px;background:var(--accs);overflow:hidden}.tl i{position:absolute;top:0;bottom:0}.tl i.bd{background:var(--c5);opacity:.55}.tl i.sd{background:var(--c3);opacity:.85}
+.tl .now{position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;background:var(--txt);border-radius:2px}
+.lg2{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:13px}.lg2 i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}.lg2 .bd{background:var(--c5)}.lg2 .sd{background:var(--c3)}.lg2 .fr{background:var(--accs);border:1px solid var(--acc)}
+.sks{display:flex;gap:8px;justify-content:space-between}.sk{display:grid;gap:6px;justify-items:center;font-size:12px;color:var(--mut)}
+.sk span{width:34px;height:34px;border-radius:50%;border:2px dashed var(--line);display:grid;place-items:center}.sk span.ok{background:var(--accs);border:2px solid var(--acc);color:var(--acc)}.sk .i{fill:currentColor;width:16px;height:16px}.sk.td span{border:2px solid var(--acc);animation:pulsering 1.8s infinite}
+.eye{display:flex;align-items:center;gap:14px}
+.wait{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:12px;background:var(--accs);color:var(--acc);font-size:13px;text-align:left}
+.dots{display:inline-flex;gap:4px}.dots i{width:7px;height:7px;border-radius:50%;background:var(--acc);animation:bounce 1s infinite}.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+.lockscr{position:absolute;inset:0;z-index:2;display:grid;place-content:center;justify-items:center;text-align:center;gap:14px;padding:24px;background:var(--win);animation:fadein .4s}
+.lockscr>*:not(.stars){position:relative;z-index:1}.lockscr h1{font-size:30px}.lockscr p{max-width:420px;color:var(--mut)}
+.lic{width:96px;height:96px;border-radius:50%;background:var(--accs);color:var(--acc);display:grid;place-items:center;animation:float 3.2s ease-in-out infinite}.lic .i{width:44px;height:44px}
+.lockscr.bed{background:#0f1838;color:#e8edf8}.lockscr.bed p{color:#a9b4d6}.lockscr.bed .btn{background:transparent;color:#e8edf8;border-color:#3a4880}.lockscr.bed .lic{background:#1d2a5c;color:#ffd978}
+.stars{position:absolute;inset:0;z-index:0;pointer-events:none;background-image:radial-gradient(2px 2px at 12% 22%,#fff,transparent),radial-gradient(2px 2px at 78% 16%,#fff,transparent),radial-gradient(1.5px 1.5px at 40% 70%,#fff,transparent),radial-gradient(2px 2px at 88% 64%,#fff,transparent),radial-gradient(1.5px 1.5px at 22% 86%,#fff,transparent),radial-gradient(2px 2px at 60% 36%,#fff,transparent);animation:tw 3s ease-in-out infinite alternate}
+.sh{position:absolute;inset:0;z-index:4;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px;animation:fadein .2s}
+.shc{width:100%;max-width:420px;background:var(--surf);border-radius:20px;padding:22px;display:grid;gap:14px;animation:rise .3s cubic-bezier(.2,.7,.2,1)}.shc h2{font-size:20px}
+.rowb{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.kl{display:grid;gap:4px;font-size:13px;color:var(--mut)}
+.demo{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:5;display:flex;gap:6px;align-items:center;padding:8px 10px;border-radius:30px;background:var(--surf);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.2);max-width:calc(100% - 20px);overflow-x:auto;white-space:nowrap}.demo .t{padding:0 6px}
+.kid.go .kw>*{animation:rise .55s cubic-bezier(.2,.7,.2,1) backwards}.kid.go .kw>*:nth-child(2){animation-delay:.06s}.kid.go .kw>*:nth-child(3){animation-delay:.12s}.kid.go .kw>*:nth-child(4){animation-delay:.18s}
+.kid.go .kr{animation:ringin 1.2s cubic-bezier(.2,.8,.2,1) .1s backwards}
+@keyframes fadein{from{opacity:0}}
+@keyframes float{50%{transform:translateY(-10px)}}
+@keyframes tw{from{opacity:.3}to{opacity:1}}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+@keyframes pulsering{0%{box-shadow:0 0 0 0 var(--accs)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media(hover:hover) and (prefers-reduced-motion:no-preference){.tile:hover{transform:translateY(-4px);border-color:var(--acc)}.tile:hover .ic{transform:scale(1.15) rotate(-8deg)}.kc:hover{border-color:var(--acc)}.kav{transition:transform .3s cubic-bezier(.3,1.6,.5,1)}.kh:hover .kav{transform:rotate(-8deg) scale(1.08)}}
+@media(max-width:820px){.kg{grid-template-columns:1fr}.kw{padding:16px 16px 110px}.kr{width:190px;height:190px}.kr>div{width:154px;height:154px}}
+.toast{position:fixed;right:24px;bottom:calc(24px + env(safe-area-inset-bottom,0px));background:var(--surf);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:8px;padding:12px 16px;box-shadow:0 8px 28px rgba(0,0,0,.25);max-width:300px;display:none;z-index:5}
+.toast.show{display:block}
+@media(max-width:820px){nav{width:58px}nav button span{display:none}nav button{justify-content:center;padding:10px}.hero,.two{grid-template-columns:1fr}main{padding:16px}}
+@media(max-width:520px){body{padding:0}.win{border-radius:0;max-height:none}.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="win">
+  
+  <div class="body">
+    <nav id="nav"></nav>
+    <main id="main"></main><div id="auth" class="auth"></div><div id="kid" class="kid"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const NAV=[["home","","Tổng quan"],["apps","","Ứng dụng"],["hist","","Lịch sử"],["lim","","Giới hạn"],["dev","","Thiết bị"],["par","","Phụ huynh"],["set","","Cài đặt"]];
+const APPS=[
+ {n:"Google Chrome",k:"Trình duyệt",m:161,c:"--c2",l:"GC",lim:180},
+ {n:"Visual Studio Code",k:"Làm việc",m:132,c:"--c1",l:"VS",lim:0},
+ {n:"Zalo",k:"Giao tiếp",m:48,c:"--c3",l:"Z",lim:60},
+ {n:"Microsoft Word",k:"Làm việc",m:36,c:"--c5",l:"W",lim:0},
+ {n:"Spotify",k:"Giải trí",m:31,c:"--c4",l:"Sp",lim:45},
+ {n:"File Explorer",k:"Khác",m:12,c:"--c6",l:"FE",lim:0}];
+const WEEK=[["T2",6.4],["T3",7.2],["T4",5.5],["T5",8.1],["T6",6.9],["T7",3.2],["CN",0]];
+const GOAL=8*3600;
+const S={kidMode:false,kidDemo:"normal",kidSec:0,kidWait:null,kidSheet:null,kidV:30,kidR:"Làm bài tập",eye:null,limAct:"Nhắc nhở",limWarn:10,user:null,auth:"login",err:"",unlocked:false,pin:"1234",pair:null,ul:null,kid:0,view:"home",app:null,sec:APPS.reduce((a,x)=>a+x.m*60,0),sess:84*60+12,focus:null,rem:true,every:45,autostart:true,limOn:[true,false,true,false,true,false],lim:APPS.map(a=>a.lim||90)};
+WEEK[6][1]=S.sec/3600;
+const $=s=>document.querySelector(s);
+const pad=n=>String(n).padStart(2,"0");
+const hms=s=>`${pad(Math.floor(s/3600))}:${pad(Math.floor(s%3600/60))}:${pad(s%60)}`;
+const hm=m=>m>=60?`${Math.floor(m/60)} giờ ${pad(m%60)} phút`:`${m} phút`;
+function toast(t){const e=$("#toast");e.textContent=t;e.className="toast show";clearTimeout(toast.t);toast.t=setTimeout(()=>e.className="toast",4200)}
+
+const ACC=[{em:"demo@thoigianmay.vn",pw:"demo1234",name:"Demo",role:"Phụ huynh"}];
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const G=id=>document.getElementById(id),A=s=>document.querySelectorAll(s);
+function enter(u){S.user={email:u.em,name:u.name,role:u.role};S.err="";S.view="home";S.app=null;S.anim=1;drawNav();render();toast("Xin chào "+u.name+"! Đăng nhập thành công.")}
+function logout(){S.kidMode=false;S.user=null;S.unlocked=false;S.pair=null;S.auth="login";S.err="";S.view="home";S.app=null;render()}
+function drawAuth(){const reg=S.auth==="reg";
+ $("#auth").innerHTML=`<div class="ac"><div class="ab"><span class="logo" style="width:28px;height:28px;border-radius:8px"></span><div><h1>Thời Gian Máy</h1><div class="t">Theo dõi thời gian dùng máy, đồng bộ Android, quản lý cho con.</div></div></div>
+ <div class="tabs"><button data-t="login" class="${reg?"":"on"}">Đăng nhập</button><button data-t="reg" class="${reg?"on":""}">Đăng ký</button></div>
+ <div class="f"><label>Email<input id="em" type="email" autocomplete="email" placeholder="ban@example.com"></label>
+ ${reg?`<label>Tên hiển thị<input id="nm" type="text" autocomplete="name"></label>`:""}
+ <label>Mật khẩu<input id="pw" type="password" autocomplete="${reg?"new-password":"current-password"}" placeholder="Ít nhất 8 ký tự"></label>
+ ${reg?`<label>Nhập lại mật khẩu<input id="pw2" type="password" autocomplete="new-password"></label><label>Bạn là<select id="rl"><option>Phụ huynh</option><option>Cá nhân</option></select></label><label class="ck"><input type="checkbox" id="tos">Tôi đồng ý với điều khoản sử dụng</label>`:`<button class="lk" id="fg" type="button">Quên mật khẩu?</button>`}
+ <div class="err" id="err" role="alert">${S.err}</div>
+ <button class="btn p" id="go">${reg?"Tạo tài khoản":"Đăng nhập"}</button><button class="btn" id="demo">Dùng tài khoản demo</button></div>
+ <p class="t" style="margin-top:12px">Bản demo: tài khoản chỉ nằm trong trang này và mất khi tải lại. Tài khoản mẫu: demo@thoigianmay.vn / demo1234.</p></div>`;
+ A("[data-t]").forEach(b=>b.onclick=()=>{S.auth=b.dataset.t;S.err="";drawAuth()});
+ const bad=m=>{S.err=m;const e=G("err");e.style.animation="none";void e.offsetWidth;e.style.animation="";e.textContent=m};
+ const go=()=>{const em=G("em").value.trim().toLowerCase(),pw=G("pw").value;
+  if(!em.includes("@")||!em.includes("."))return bad("Email không hợp lệ.");
+  if(pw.length<8)return bad("Mật khẩu cần ít nhất 8 ký tự.");
+  let u;
+  if(reg){const nm=G("nm").value.trim();if(!nm)return bad("Hãy nhập tên hiển thị.");if(pw!==G("pw2").value)return bad("Mật khẩu nhập lại không khớp.");if(!G("tos").checked)return bad("Bạn cần đồng ý với điều khoản sử dụng.");if(ACC.some(a=>a.em===em))return bad("Email này đã được đăng ký.");u={em,pw,name:nm,role:G("rl").value};ACC.push(u)}
+  else{u=ACC.find(a=>a.em===em&&a.pw===pw);if(!u)return bad("Email hoặc mật khẩu không đúng.")}
+  enter(u)};
+ G("go").onclick=go;A(".f input").forEach(i=>i.onkeydown=e=>e.key==="Enter"&&go());
+ G("demo").onclick=()=>enter(ACC[0]);
+ if(G("fg"))G("fg").onclick=()=>{const em=G("em").value.trim();if(!em.includes("@"))return bad("Nhập email để nhận liên kết đặt lại mật khẩu.");bad("");toast("Đã gửi liên kết đặt lại mật khẩu tới "+em+" (giả lập).")}}
+
+const DEVS=[
+{n:"LOPHONG-PC",t:"win",m:"Windows 11 · máy này",min:420,sync:"Đang hoạt động",ap:[["Chrome",161],["VS Code",132],["Zalo",48]]},
+{n:"Galaxy A54 của Minh",t:"and",m:"Samsung · Android 14",min:195,sync:"2 phút trước",bat:68,perm:[1,1,0],ap:[["TikTok",74],["YouTube",52],["Zalo",31],["Roblox",24]]},
+{n:"Lenovo Tab M10 của An",t:"and",m:"Lenovo · Android 12",min:62,sync:"18 phút trước",bat:41,perm:[1,1,1],ap:[["YouTube Kids",40],["Duolingo",14],["Chrome",8]]}];
+const PERM=["Dữ liệu sử dụng","Hiển thị trên ứng dụng khác","Bỏ qua tối ưu pin"];
+function newPair(){S.pair={c:String(100000+Math.floor(Math.random()*900000)),left:300}}
+function qr(seed){let s=+seed||1,o="";for(let y=0;y<21;y++)for(let x=0;x<21;x++){const B=(x<7&&y<7)?[0,0]:(x>13&&y<7)?[14,0]:(x<7&&y>13)?[0,14]:null;let on;if(B){const a=x-B[0],b=y-B[1];on=a%6===0||b%6===0||(a>1&&a<5&&b>1&&b<5)}else{s=(s*1103515245+12345)&0x7fffffff;on=(s>>16)&1}o+=`<i class="${on?"":"w"}"></i>`}return o}
+const devCard=(d,i)=>`<div class="card"><div style="display:flex;gap:12px;align-items:center"><div class="ic" style="width:40px;height:40px;font-size:18px;background:var(--c${i+1})">${ico(d.t==="win"?"pc":"phone")}</div><div style="flex:1"><b>${d.n}</b><div class="t">${d.m}</div></div><span class="chip">${d.t==="win"?"Máy này":"Đã liên kết"}</span></div>
+<div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin:14px 0;gap:8px"><div class="stat"><b style="font-size:17px">${hm(d.min)}</b><span>Hôm nay</span></div><div class="stat"><b style="font-size:17px">${d.bat!=null?d.bat+"%":"—"}</b><span>Pin</span></div><div class="stat"><b style="font-size:17px">${d.sync.replace(" trước","")}</b><span>Đồng bộ</span></div></div>
+${d.ap.length?d.ap.map(a=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>${a[0]}</span><span class="t">${a[1]} phút</span></div>`).join(""):'<div class="t">Chưa có dữ liệu sử dụng.</div>'}
+${d.perm?`<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${d.perm.map((p,k)=>`<span class="chip ${p?"":"bad"}">${ico(p?"ok":"warn")}${PERM[k]}</span>`).join("")}</div><div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-sync="${i}">Đồng bộ ngay</button><button class="btn" data-ul="${i}">Hủy liên kết</button></div>`:""}</div>`;
+const pairPanel=()=>`<div class="card" style="margin-top:14px"><h3>Liên kết thiết bị Android</h3><div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center"><div class="qr">${qr(S.pair.c)}</div><div style="flex:1;min-width:230px"><div class="t">Mã liên kết</div><div class="code">${S.pair.c.slice(0,3)} ${S.pair.c.slice(3)}</div><div class="t">Hết hạn sau <b id="pcd">${pad(Math.floor(S.pair.left/60))}:${pad(S.pair.left%60)}</b></div>
+<ol class="t" style="margin:12px 0 12px 18px;line-height:1.7"><li>Cài ứng dụng Thời Gian Máy trên Google Play.</li><li>Đăng nhập bằng đúng tài khoản này.</li><li>Chọn Liên kết với máy tính, rồi quét mã QR hoặc nhập mã.</li><li>Cấp quyền truy cập dữ liệu sử dụng khi được hỏi.</li></ol>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" id="psim">Giả lập: điện thoại đã quét</button><button class="btn" id="pnew">Tạo mã mới</button><button class="btn" id="pcl">Đóng</button></div></div></div></div>`;
+function devices(){const tot=DEVS.reduce((s,d)=>s+d.min,0);
+ return `<h1>Thiết bị</h1><p class="sub">Các thiết bị đăng nhập ${esc(S.user.email)}. Thời gian được cộng gộp theo ngày.</p>
+ <div class="card"><h3>Tổng hôm nay trên mọi thiết bị: ${hm(tot)}</h3><div style="display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px">${DEVS.map((d,i)=>`<i style="flex:${Math.max(d.min,1)};background:var(--c${i%6+1})"></i>`).join("")}</div><div class="lg" style="margin-top:10px">${DEVS.map((d,i)=>`<div><i style="background:var(--c${i%6+1})"></i>${d.n} · ${hm(d.min)}</div>`).join("")}</div></div>
+ <div class="dv" style="margin-top:14px">${DEVS.map(devCard).join("")}<div class="card" style="display:grid;place-content:center;text-align:center;gap:10px;border-style:dashed;min-height:150px"><div class="bigi">${ico("phone")}</div><div>Thêm điện thoại hoặc máy tính bảng Android</div><button class="btn p" id="addp">Liên kết thiết bị Android</button></div></div>${S.pair?pairPanel():""}`}
+
+const KIDS=[
+{n:"Bé Minh",age:11,dn:"Galaxy A54 của Minh",used:195,lw:120,le:240,extra:0,locked:false,bedOn:true,bedA:"21:00",bedB:"06:30",studyOn:true,studyA:"19:00",studyB:"21:00",web:"Vừa",ss:true,adult:true,apk:true,newapp:true,report:true,apps:[["TikTok","Tk","--c4",74,1,60],["YouTube","Yt","--c3",52,0,0],["Roblox","Rb","--c2",24,0,30],["Zalo","Z","--c5",31,0,0],["Google Classroom","Cl","--c1",15,0,0]],req:[["Xin thêm 30 phút để làm bài tập nhóm","3 phút trước",30],["Xin mở TikTok thêm 15 phút","1 giờ trước",15]],log:[["Chặn TikTok ngoài giờ cho phép","21:12"],["Đã dùng 90% giới hạn hôm nay","20:40"],["Bật chế độ giờ học","19:00"]]},
+{n:"Bé An",age:7,dn:"Lenovo Tab M10 của An",used:62,lw:60,le:90,extra:0,locked:false,bedOn:true,bedA:"20:00",bedB:"07:00",studyOn:false,studyA:"19:00",studyB:"20:00",web:"Nghiêm ngặt",ss:true,adult:true,apk:true,newapp:true,report:false,apps:[["YouTube Kids","Yk","--c4",40,0,45],["Duolingo","Du","--c1",14,0,0],["Chrome","Gc","--c2",8,1,0]],req:[],log:[["Đã đồng bộ dữ liệu","20:10"]]}];
+function parental(){
+ if(!S.unlocked)return `<h1>Quản lý của phụ huynh</h1><p class="sub">Nhập mã PIN phụ huynh để thay đổi cài đặt cho con.</p><div class="card" style="max-width:360px"><div class="f"><label>Mã PIN (4 số)<input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label><div class="err" id="perr" role="alert"></div><button class="btn p" id="pgo">Mở khóa</button><div class="t">Mã PIN demo: 1234</div></div></div>`;
+ const k=KIDS[S.kid],lm=k.le+k.extra,pc=Math.min(k.used/lm,1)*100,over=k.used>=lm;
+ const sw=(f,l,sub)=>`<div class="set"><div>${l}${sub?`<small>${sub}</small>`:""}</div><label class="sw"><input type="checkbox" data-kf="${f}" ${k[f]?"checked":""} aria-label="${l}"><b></b></label></div>`;
+ const rg=(f,l)=>`<div class="set" style="display:block"><div style="display:flex;justify-content:space-between"><span>${l}</span><b id="o_${f}">${hm(k[f])}</b></div><input type="range" min="30" max="360" step="15" value="${k[f]}" data-kf="${f}" style="width:100%;accent-color:var(--acc);margin-top:6px" aria-label="${l}"></div>`;
+ const tm=(a,b,l)=>`<div class="set"><div>${l}</div><div style="display:flex;gap:6px;align-items:center"><input type="time" data-kf="${a}" value="${k[a]}" style="width:auto" aria-label="${l} từ">–<input type="time" data-kf="${b}" value="${k[b]}" style="width:auto" aria-label="${l} đến"></div></div>`;
+ return `<div class="ah"><div><h1>Quản lý của phụ huynh</h1><div class="t">Thay đổi được áp dụng lên thiết bị của con sau khi đồng bộ.</div></div><div class="st"><button class="btn" id="kidgo">${ico("phone")}Xem giao diện máy con</button><button class="btn" id="relock">${ico("lock")}Khóa lại</button></div></div>
+ <div class="tabs" style="max-width:380px">${KIDS.map((c,i)=>`<button class="${i===S.kid?"on":""}" data-kid="${i}">${c.n} (${c.age} tuổi)</button>`).join("")}</div>
+ <div class="c2" style="margin-top:0"><div class="card"><h3>Hôm nay · ${k.dn}</h3><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:24px">${hm(k.used)}</b><span class="t">trên ${hm(lm)}</span></div><div class="meter" style="height:10px;margin:8px 0 12px"><i style="width:${pc}%;background:${over?"var(--warn)":"var(--acc)"}"></i></div><div class="t" style="margin-bottom:12px">${k.locked?"Thiết bị đang bị khóa.":over?"Con đã hết thời gian hôm nay.":"Còn lại "+hm(lm-k.used)+". Hôm nay là Chủ nhật nên áp dụng giới hạn cuối tuần."}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="p15">+15 phút</button><button class="btn ${k.locked?"p":""}" data-act="lock">${k.locked?"Mở khóa thiết bị":"Khóa thiết bị ngay"}</button></div></div>
+ <div class="card"><h3>Yêu cầu từ con</h3>${k.req.length?k.req.map((r,i)=>`<div class="set"><div>${r[0]}<small>${r[1]}</small></div><div style="display:flex;gap:6px"><button class="btn p" data-rq="${i}:1">Duyệt</button><button class="btn" data-rq="${i}:0">Từ chối</button></div></div>`).join(""):'<div class="t">Chưa có yêu cầu nào. Khi con xin thêm thời gian, yêu cầu sẽ hiện ở đây.</div>'}</div></div>
+ <div class="c2"><div class="card"><h3>Thời gian dùng máy</h3>${rg("lw","Ngày thường")}${rg("le","Cuối tuần")}${sw("bedOn","Giờ đi ngủ","Khóa thiết bị trong khung giờ này")}${tm("bedA","bedB","Khung giờ ngủ")}${sw("studyOn","Giờ học","Chỉ cho dùng ứng dụng học tập")}${tm("studyA","studyB","Khung giờ học")}</div>
+ <div class="card"><h3>Ứng dụng của con</h3>${k.apps.map((a,i)=>`<div class="row" style="grid-template-columns:28px 1fr auto auto"><div class="ic" style="background:var(${a[2]})">${a[1]}</div><div>${a[0]}<div class="t">${a[3]} phút hôm nay</div></div><select data-al="${i}" aria-label="Giới hạn ${a[0]}">${[0,15,30,45,60].map(v=>`<option value="${v}" ${a[5]===v?"selected":""}>${v?v+" phút":"Không giới hạn"}</option>`).join("")}</select><label class="sw" title="Chặn"><input type="checkbox" data-ab="${i}" ${a[4]?"checked":""} aria-label="Chặn ${a[0]}"><b></b></label></div>`).join("")}<div class="t" style="margin-top:8px">Công tắc bên phải dùng để chặn hoàn toàn ứng dụng.</div></div></div>
+ <div class="c2"><div class="card"><h3>Lọc nội dung web</h3><div class="set"><div>Mức lọc<small>Gợi ý theo độ tuổi của con</small></div><select data-kf="web" aria-label="Mức lọc">${["Nghiêm ngặt","Vừa","Nhẹ","Tắt"].map(v=>`<option ${k.web===v?"selected":""}>${v}</option>`).join("")}</select></div>${sw("ss","SafeSearch")}${sw("adult","Chặn trang nội dung người lớn")}${sw("apk","Chặn cài ứng dụng ngoài cửa hàng","Không cho cài file APK hoặc EXE lạ")}</div>
+ <div class="card"><h3>Thông báo và bảo mật</h3>${sw("newapp","Báo khi con cài ứng dụng mới")}${sw("report","Gửi báo cáo tuần qua email",esc(S.user.email))}<div class="set"><div>Đổi mã PIN</div><div style="display:flex;gap:6px"><input id="np" type="password" inputmode="numeric" maxlength="4" placeholder="4 số" style="width:80px" aria-label="Mã PIN mới"><button class="btn" id="npb">Lưu</button></div></div></div></div>
+ <div class="card" style="margin-top:14px"><h3>Hoạt động gần đây</h3>${k.log.map(l=>`<div class="kv"><span>${l[0]}</span><span class="t">${l[1]}</span></div>`).join("")}</div>`}
+
+function bindExtra(){
+ bindLim();
+ if(S.view==="set"&&G("lo2"))G("lo2").onclick=logout;
+ if(S.view==="dev"){const P=(id,f)=>G(id)&&(G(id).onclick=f);
+  P("addp",()=>{newPair();render()});P("pnew",()=>{newPair();render()});P("pcl",()=>{S.pair=null;render()});
+  P("psim",()=>{DEVS.push({n:"Pixel 8 (mới)",t:"and",m:"Google · Android 15",min:0,sync:"Vừa xong",bat:90,perm:[1,0,0],ap:[]});S.pair=null;toast("Đã liên kết Pixel 8. Cần cấp thêm 2 quyền trên điện thoại.");render()});
+  A("[data-sync]").forEach(b=>b.onclick=()=>{const d=DEVS[+b.dataset.sync];d.sync="Vừa xong";toast("Đã đồng bộ "+d.n+".");render()});
+  A("[data-ul]").forEach(b=>b.onclick=()=>{const i=+b.dataset.ul;if(S.ul===i){toast("Đã hủy liên kết "+DEVS[i].n+".");DEVS.splice(i,1);S.ul=null;render()}else{S.ul=i;b.textContent="Bấm lần nữa để xác nhận"}})}
+ if(S.view==="par"){
+  if(!S.unlocked){const go=()=>{if(G("pin").value===S.pin){S.unlocked=true;S.anim=1;render()}else G("perr").textContent="Mã PIN không đúng."};G("pgo").onclick=go;G("pin").onkeydown=e=>e.key==="Enter"&&go();return}
+  const k=KIDS[S.kid];
+  G("relock").onclick=()=>{S.unlocked=false;render()};G("kidgo").onclick=()=>{S.kidMode=true;S.kidDemo="normal";S.kidSec=0;S.kidWait=null;S.kidSheet=null;S.eye=null;S.anim=1;render()};
+  A("[data-kid]").forEach(b=>b.onclick=()=>{S.kid=+b.dataset.kid;render()});
+  A("[data-kf]").forEach(e=>{const f=e.dataset.kf,r=e.type==="range";e[r?"oninput":"onchange"]=()=>{k[f]=e.type==="checkbox"?e.checked:r?+e.value:e.value;if(r)G("o_"+f).textContent=hm(+e.value);else render()}});
+  A("[data-ab]").forEach(e=>e.onchange=()=>{const a=k.apps[+e.dataset.ab];a[4]=e.checked?1:0;k.log.unshift([(e.checked?"Đã chặn ":"Bỏ chặn ")+a[0],"Vừa xong"]);render()});
+  A("[data-al]").forEach(e=>e.onchange=()=>{k.apps[+e.dataset.al][5]=+e.value;toast("Đã lưu giới hạn ứng dụng.")});
+  A("[data-rq]").forEach(b=>b.onclick=()=>{const p=b.dataset.rq.split(":"),r=k.req.splice(+p[0],1)[0];if(+p[1]){k.extra+=r[2];if(!r[2])k.locked=false;k.log.unshift(["Đã duyệt: "+r[0],"Vừa xong"])}else k.log.unshift(["Đã từ chối: "+r[0],"Vừa xong"]);render()});
+  A("[data-act]").forEach(b=>b.onclick=()=>{if(b.dataset.act==="p15"){k.extra+=15;k.log.unshift(["Cộng thêm 15 phút","Vừa xong"])}else{k.locked=!k.locked;k.log.unshift([k.locked?"Đã khóa thiết bị":"Đã mở khóa thiết bị","Vừa xong"])}render()});
+  G("npb").onclick=()=>{const v=G("np").value;if(v.length===4&&!isNaN(v)){S.pin=v;toast("Đã đổi mã PIN.")}else toast("Mã PIN phải gồm đúng 4 chữ số.")}}}
+function tickExtra(){tickKid();if(!S.pair)return;S.pair.left--;if(S.pair.left<=0){newPair();if(S.view==="dev")render();return}const e=G("pcd");if(e)e.textContent=pad(Math.floor(S.pair.left/60))+":"+pad(S.pair.left%60)}
+const IC={home:'<path d="M5 20V11M12 20V4M19 20v-6"/>',apps:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',hist:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',lim:'<path d="M6 3h12M6 21h12M8 3c0 5 4 6 4 9s-4 4-4 9M16 3c0 5-4 6-4 9s4 4 4 9"/>',dev:'<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',par:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',set:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',theme:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',pc:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',star:'<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/>',send:'<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',ok:'<path d="M5 12l5 5 9-10"/>',warn:'<path d="M12 7v6M12 17h.01"/>',phone:'<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>'};
+const ico=k=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${IC[k]||""}</svg>`;
+function limSt(i){const u=Math.floor(APPS[i].m),L=S.lim[i];if(!S.limOn[i])return["","Không giới hạn"];if(u>=L)return["bad","Đã vượt "+hm(u-L)];if(u>=L*.8)return["warn","Sắp hết · còn "+hm(L-u)];return["ok","Còn "+hm(L-u)]}
+function limBlock(i){const a=APPS[i],on=S.limOn[i],L=S.lim[i];
+ return `<div class="lc"><div class="lrow"><span>${on?"Giới hạn mỗi ngày":"Chưa đặt giới hạn"}</span><label class="sw"><input type="checkbox" data-lt="${i}" ${on?"checked":""} aria-label="Bật giới hạn ${a.n}"><b></b></label></div>${on?`<div class="pre">${[30,60,120,180].map(v=>`<button class="pc ${L===v?"on":""}" data-lp="${i}:${v}">${v<60?v+" phút":v/60+" giờ"}</button>`).join("")}</div><div class="step"><button data-ls="${i}:-15" aria-label="Giảm 15 phút">−</button><b>${hm(L)}</b><button data-ls="${i}:15" aria-label="Tăng 15 phút">+</button></div>`:""}</div>`}
+function limits(){let near=0,over=0;const on=S.limOn.filter(Boolean).length;
+ APPS.forEach((a,i)=>{const t=limSt(i)[0];if(t==="warn")near++;if(t==="bad")over++});
+ return `<h1>Giới hạn ứng dụng</h1><p class="sub">Đặt thời gian tối đa mỗi ngày: chọn mốc có sẵn hoặc chỉnh từng 15 phút.</p>
+ <div class="grid stats" style="margin-bottom:14px"><div class="card stat"><span>Đang giới hạn</span><b>${on}</b><em>trên ${APPS.length} ứng dụng</em></div><div class="card stat"><span>Sắp hết giờ</span><b>${near}</b><em>đã dùng trên 80%</em></div><div class="card stat"><span>Đã vượt</span><b style="${over?"color:var(--warn)":""}">${over}</b><em>hôm nay</em></div></div>
+ <div class="card" style="margin-bottom:14px"><div class="set"><div>Đặt nhanh cho mọi ứng dụng<small>Áp dụng một mức chung, sau đó chỉnh riêng từng ứng dụng.</small></div><div class="pre"><button class="pc" data-all="60">1 giờ</button><button class="pc" data-all="120">2 giờ</button><button class="pc" data-all="180">3 giờ</button><button class="pc" data-all="0">Tắt hết</button></div></div>
+ <div class="set"><div>Khi hết giờ<small>Cách ứng dụng phản ứng khi chạm giới hạn.</small></div><select id="lact" aria-label="Khi hết giờ">${["Nhắc nhở","Làm mờ màn hình","Chặn ứng dụng"].map(o=>`<option ${o===S.limAct?"selected":""}>${o}</option>`).join("")}</select></div>
+ <div class="set"><div>Nhắc trước khi hết giờ</div><select id="lwarn" aria-label="Nhắc trước">${[5,10,15].map(v=>`<option value="${v}" ${S.limWarn===v?"selected":""}>${v} phút</option>`).join("")}</select></div></div>
+ <div class="dv" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">${APPS.map((a,i)=>{const[t,txt]=limSt(i),u=Math.floor(a.m),L=S.lim[i],pc=S.limOn[i]?Math.min(u/L*100,100):0,col=t==="bad"?"var(--warn)":t==="warn"?"var(--c3)":"var(--acc)";
+ return `<div class="card lr"><div class="lh"><div class="ic" style="background:var(${a.c})">${a.l}</div><div class="lm"><div>${a.n}</div><div class="t" style="${t==="bad"?"color:var(--warn)":""}">${txt}</div></div></div>${S.limOn[i]?`<div><div class="meter" style="height:8px"><i style="width:${pc}%;background:${col}"></i></div><div class="lt"><span>Đã dùng ${hm(u)}</span><span>Mốc ${hm(L)}</span></div></div>`:`<div class="t">Đã dùng ${hm(u)} hôm nay</div>`}${limBlock(i)}</div>`}).join("")}</div>`}
+function bindLim(){
+ A("[data-lt]").forEach(e=>e.onchange=()=>{S.limOn[+e.dataset.lt]=e.checked;render()});
+ A("[data-lp]").forEach(b=>b.onclick=()=>{const p=b.dataset.lp.split(":");S.lim[+p[0]]=+p[1];render()});
+ A("[data-ls]").forEach(b=>b.onclick=()=>{const p=b.dataset.ls.split(":"),i=+p[0];S.lim[i]=Math.min(480,Math.max(15,S.lim[i]+Number(p[1])));render()});
+ A("[data-all]").forEach(b=>b.onclick=()=>{const v=+b.dataset.all;APPS.forEach((_,i)=>{S.limOn[i]=v>0;if(v)S.lim[i]=v});toast(v?"Đã đặt giới hạn "+hm(v)+" cho mọi ứng dụng.":"Đã tắt mọi giới hạn.");render()});
+ if(G("lact"))G("lact").onchange=e=>{S.limAct=e.target.value;toast("Khi hết giờ: "+S.limAct+".")};
+ if(G("lwarn"))G("lwarn").onchange=e=>{S.limWarn=+e.target.value;toast("Sẽ nhắc trước "+S.limWarn+" phút.")}}
+const LEARN=["Duolingo","Google Classroom"];
+const toMin=t=>{const p=t.split(":");return +p[0]*60+ +p[1]};
+function kidState(){const k=KIDS[S.kid],rem=(k.le+k.extra)*60-k.used*60-S.kidSec;if(k.locked||S.kidDemo==="lock")return"lock";if(S.kidDemo==="bed")return"bed";if(rem<=0)return"over";if(S.kidDemo==="study")return"study";return rem<=600?"low":"normal"}
+function kidApp(a,st){if(a[4])return["blk","Bị chặn",0];if(st==="study"&&!LEARN.includes(a[0]))return["blk","Giờ học",0];if(a[5]){const r=a[5]-a[3];return r<=0?["blk","Hết giờ ứng dụng",100]:["ok","Còn "+r+" phút",a[3]/a[5]*100]}return["ok",a[3]+" phút hôm nay",0]}
+function setDemo(d){const k=KIDS[S.kid],r0=Math.max((k.le+k.extra)*60-k.used*60,0);S.kidDemo=d;S.kidWait=null;S.kidSheet=null;S.eye=null;S.kidSec=d==="low"?Math.max(r0-300,0):d==="over"?r0:0;S.anim=1;render()}
+function kidSend(txt,v){const k=KIDS[S.kid];k.req.unshift([txt,"Vừa xong",v]);k.log.unshift(["Con gửi: "+txt,"Vừa xong"]);S.kidWait={txt,v};S.kidSheet=null;render();toast("Đã gửi cho bố mẹ. Bạn hãy chờ một chút nhé!")}
+function kidApprove(){const k=KIDS[S.kid],w=S.kidWait;if(!w)return;const i=k.req.findIndex(r=>r[0]===w.txt);if(i>=0)k.req.splice(i,1);k.extra+=w.v;if(!w.v){k.locked=false;if(S.kidDemo==="lock")S.kidDemo="normal"}k.log.unshift(["Đã duyệt: "+w.txt,"Vừa xong"]);S.kidWait=null;S.anim=1;render();toast(w.v?"Bố mẹ cho thêm "+w.v+" phút. Dùng thật tốt nhé!":"Bố mẹ đã mở khóa thiết bị.")}
+function kidSheetHtml(k){const sh=S.kidSheet;if(!sh)return"";
+ if(sh.t==="pin")return `<div class="sh" id="shbg"><div class="shc" role="dialog" aria-label="Mã PIN phụ huynh"><h2>Dành cho phụ huynh</h2><div class="t">Nhập mã PIN (demo: 1234) để mở bảng quản lý.</div><input id="kpin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Mã PIN"><div class="err" id="kperr" role="alert"></div><div class="rowb"><button class="btn" id="shx">Hủy</button><button class="btn p" id="kpgo">Mở</button></div></div></div>`;
+ const ti=sh.t==="app"?"Xin mở "+k.apps[sh.i][0]:"Xin thêm thời gian";
+ return `<div class="sh" id="shbg"><div class="shc" role="dialog" aria-label="${ti}"><h2>${ti}</h2><div class="t">Chọn thời gian bạn cần. Bố mẹ sẽ nhận được yêu cầu của bạn.</div><div class="pre">${[15,30,45].map(v=>`<button class="pc ${S.kidV===v?"on":""}" data-kv="${v}">${v} phút</button>`).join("")}</div>${sh.t==="time"?`<label class="kl">Lý do<select id="krs">${["Làm bài tập","Học online","Gọi điện cho người thân","Lý do khác"].map(o=>`<option ${o===S.kidR?"selected":""}>${o}</option>`).join("")}</select></label>`:""}<div class="rowb"><button class="btn" id="shx">Hủy</button><button class="btn p" id="ksend">${ico("send")}Gửi cho bố mẹ</button></div></div></div>`}
+function drawKid(){
+ const k=KIDS[S.kid],st=kidState(),lm=(k.le+k.extra)*60,rem=Math.max(lm-k.used*60-S.kidSec,0),pct=rem/lm*100;
+ const d=new Date(),days=["Chủ nhật","Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy"];
+ let nm=d.getHours()*60+d.getMinutes();
+ const a=toMin(k.bedA),b=toMin(k.bedB),sa=toMin(k.studyA),sb=toMin(k.studyB);
+ if(S.kidDemo==="bed")nm=(a+40)%1440;if(S.kidDemo==="study")nm=sa+25;
+ const tm=pad(Math.floor(nm/60))+":"+pad(nm%60),nick=k.n.replace("Bé ","");
+ const seg=(l,r,c)=>`<i class="${c}" style="left:${l/14.4}%;width:${(r-l)/14.4}%"></i>`;
+ const tl=(k.bedOn?(a>b?seg(0,b,"bd")+seg(a,1440,"bd"):seg(a,b,"bd")):"")+(k.studyOn?seg(sa,sb,"sd"):"");
+ const msg={normal:"Bạn đang làm rất tốt. Nhớ nghỉ mắt sau mỗi 20 phút nhé!",low:"Sắp hết giờ rồi. Hãy lưu bài và chuẩn bị tắt máy.",study:"Đang trong giờ học: chỉ các ứng dụng học tập được mở."}[st]||"";
+ const wait=S.kidWait?`<div class="wait"><span class="dots"><i></i><i></i><i></i></span><span>Đang chờ bố mẹ duyệt: ${esc(S.kidWait.txt)}</span></div>`:"";
+ const tiles=k.apps.map((x,i)=>{const[s2,txt,p]=kidApp(x,st);return `<button class="tile ${s2==="blk"?"lk":""}" data-tile="${i}"><div class="ic" style="background:var(${x[2]})">${x[1]}</div><b>${x[0]}</b><span class="t">${s2==="blk"?ico("lock"):""}${txt}</span>${p&&s2==="ok"?`<div class="meter"><i style="width:${p}%;background:var(${p>80?"--warn":x[2]})"></i></div>`:""}</button>`}).join("");
+ const wk=[["T2",1],["T3",1],["T4",0],["T5",1],["T6",1],["T7",1],["CN",2]];
+ const sk=wk.map(w=>`<div class="sk ${w[1]===2?"td":""}"><span class="${w[1]===1?"ok":""}">${w[1]===1?ico("star"):""}</span>${w[0]}</div>`).join("");
+ const main=`<div class="kscroll"><div class="kw">
+ <div class="kh"><div class="kav">${esc(nick[0])}</div><div style="flex:1"><h1>Chào ${esc(nick)}!</h1><div class="t">${days[d.getDay()]} · ${tm} · ${k.dn}</div></div><button class="btn" data-sheet="pin">${ico("lock")}Dành cho phụ huynh</button></div>
+ <div class="kg"><div class="kc kh2"><div class="t">Thời gian còn lại hôm nay</div><div class="kr" id="kr" style="--p:${pct}%;--rc:${st==="low"?"var(--warn)":"var(--acc)"}"><div><strong id="kt">${hms(rem)}</strong><span class="t">trên ${hm(lm/60)}</span></div></div><div class="t" style="min-height:40px">${msg}</div>${S.kidWait?wait:`<button class="btn p" data-sheet="time">${ico("send")}Xin thêm thời gian</button>`}</div>
+ <div style="display:grid;gap:16px;align-content:start"><div class="kc"><h3>Lịch hôm nay</h3><div class="tlw"><div class="tl">${tl}<b class="now" style="left:${nm/14.4}%"></b></div><div class="hl"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div></div><div class="lg2"><span><i class="bd"></i>Giờ ngủ ${k.bedOn?k.bedA+"–"+k.bedB:"(tắt)"}</span><span><i class="sd"></i>Giờ học ${k.studyOn?k.studyA+"–"+k.studyB:"(tắt)"}</span><span><i class="fr"></i>Thời gian tự do</span></div></div>
+ <div class="kc"><h3>Tuần này</h3><div class="sks">${sk}</div><div class="t" style="margin-top:12px">Bạn đã dùng đúng giới hạn 5 ngày. Giữ vững đến hết tuần nhé!</div></div></div></div>
+ <div class="kc"><h3>Ứng dụng của bạn</h3><div class="tiles">${tiles}</div></div>
+ <div class="kc eye"><div style="flex:1"><b>Nghỉ mắt 20 giây</b><div class="t">Nhìn ra xa khoảng 6 mét để mắt đỡ mỏi.</div></div><button class="btn" id="eyeb">${S.eye==null?"Bắt đầu":S.eye+" giây"}</button></div>
+ </div></div>`;
+ const L={over:["lim","Hết giờ dùng máy hôm nay","Bạn đã dùng đủ "+hm(lm/60)+". Hẹn gặp lại vào ngày mai nhé!",""],bed:["moon","Đến giờ đi ngủ rồi","Máy sẽ mở lại lúc "+k.bedB+". Chúc bạn ngủ ngon!","bed"],lock:["lock","Thiết bị đang được khóa","Bố mẹ đã khóa thiết bị này. Hãy nhắn bố mẹ nếu bạn cần dùng.",""]}[st];
+ const lk=L?`<div class="lockscr ${L[3]}">${L[3]?'<div class="stars"></div>':""}<div class="lic">${ico(L[0])}</div><h1>${L[1]}</h1><p>${L[2]}</p>${S.kidWait?wait:`<div class="rowb" style="justify-content:center">${st==="over"?'<button class="btn p" data-sheet="time">'+ico("send")+'Xin thêm thời gian</button>':st==="lock"?'<button class="btn p" id="kunlock">'+ico("send")+'Xin bố mẹ mở khóa</button>':""}<button class="btn" id="kcall">Gọi bố mẹ</button></div>`}</div>`:"";
+ const DS=[["normal","Bình thường"],["low","Sắp hết giờ"],["over","Hết giờ"],["bed","Giờ ngủ"],["study","Giờ học"],["lock","Bị khóa"]];
+ const demo=`<div class="demo"><span class="t">Xem thử máy con</span><select id="ksel" aria-label="Chọn con">${KIDS.map((c,i)=>`<option value="${i}" ${i===S.kid?"selected":""}>${c.n}</option>`).join("")}</select>${DS.map(x=>`<button class="pc ${S.kidDemo===x[0]?"on":""}" data-ds="${x[0]}">${x[1]}</button>`).join("")}${S.kidWait?'<button class="pc on" id="ksim">Giả lập: bố mẹ duyệt</button>':""}<button class="btn" id="kexit">Thoát xem thử</button></div>`;
+ const kd=$("#kid");kd.innerHTML=main+lk+kidSheetHtml(k)+demo;kd.classList.toggle("go",!!S.anim);S.anim=0;
+ A("[data-tile]").forEach(t=>t.onclick=()=>{const i=+t.dataset.tile,x=k.apps[i];if(kidApp(x,st)[0]==="blk"){S.kidSheet={t:"app",i};render()}else toast("Đang mở "+x[0]+" (demo).")});
+ A("[data-sheet]").forEach(t=>t.onclick=()=>{S.kidSheet={t:t.dataset.sheet};render()});
+ A("[data-ds]").forEach(t=>t.onclick=()=>setDemo(t.dataset.ds));
+ A("[data-kv]").forEach(t=>t.onclick=()=>{S.kidV=+t.dataset.kv;render()});
+ const on=(id,f)=>G(id)&&(G(id).onclick=f);
+ on("kcall",()=>toast("Đang gọi cho bố mẹ... (demo)"));on("kexit",()=>{S.kidMode=false;S.anim=1;render()});on("ksim",kidApprove);
+ on("kunlock",()=>kidSend("Xin bố mẹ mở khóa thiết bị",0));on("shx",()=>{S.kidSheet=null;render()});
+ if(G("shbg"))G("shbg").onclick=e=>{if(e.target.id==="shbg"){S.kidSheet=null;render()}};
+ if(G("krs"))G("krs").onchange=e=>S.kidR=e.target.value;
+ on("ksend",()=>{const sh=S.kidSheet;kidSend(sh.t==="app"?"Xin mở "+k.apps[sh.i][0]+" thêm "+S.kidV+" phút":"Xin thêm "+S.kidV+" phút ("+S.kidR+")",S.kidV)});
+ const go=()=>{if(G("kpin").value===S.pin){S.kidMode=false;S.unlocked=true;S.view="par";S.kidSheet=null;S.anim=1;drawNav();render()}else G("kperr").textContent="Mã PIN không đúng."};
+ if(G("kpgo")){G("kpgo").onclick=go;G("kpin").onkeydown=e=>e.key==="Enter"&&go();G("kpin").focus()}
+ if(G("ksel"))G("ksel").onchange=e=>{S.kid=+e.target.value;setDemo("normal")};
+ on("eyeb",()=>{if(S.eye==null){S.eye=20;render()}})}
+function tickKid(){if(!S.kidMode||!S.user)return;const st=kidState(),stop=["lock","bed","over"].includes(st);
+ if(S.eye!=null&&!stop){S.eye--;if(S.eye<=0){S.eye=null;toast("Mắt khỏe hơn rồi. Cảm ơn bạn!");render();return}const e=G("eyeb");if(e)e.textContent=S.eye+" giây"}
+ if(stop)return;S.kidSec++;if(kidState()!==st){render();return}
+ const k=KIDS[S.kid],lm=(k.le+k.extra)*60,rem=lm-k.used*60-S.kidSec,t=G("kt");if(t){t.textContent=hms(rem);G("kr").style.setProperty("--p",rem/lm*100+"%")}}
+function drawNav(){$("#nav").innerHTML=`<div class="me"><span class="logo"></span><div><b>Thời Gian Máy</b><div class="t">${S.user?esc(S.user.name)+" · "+S.user.role:""}</div></div></div>`+NAV.map(([k,i,t])=>`<button data-v="${k}" class="${S.view===k?"on":""}">${ico(k)}<span>${t}</span></button>`).join("")+`<div class="sp"></div><button id="theme">${ico("theme")}<span>Giao diện sáng/tối</span></button><button id="out">${ico("out")}<span>Đăng xuất</span></button>`;
+ document.querySelectorAll("nav [data-v]").forEach(b=>b.onclick=()=>{S.view=b.dataset.v;S.app=null;S.anim=1;drawNav();render()});
+ $("#out").onclick=logout;$("#theme").onclick=()=>{const r=document.documentElement;const dark=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme:dark)").matches;r.dataset.theme=dark?"light":"dark"}}
+
+function appRows(n){return APPS.slice(0,n).map((a,i)=>`<div class="row" data-open="${i}"><div class="ic" style="background:var(${a.c})">${a.l}</div><div><div>${a.n}</div><div class="meter"><i style="width:${a.m/APPS[0].m*100}%;background:var(${a.c})"></i></div></div><div class="t" data-app="${a.n}">${hm(a.m)}</div></div>`).join("")}
+
+function home(){
+ const p=Math.min(S.sec/GOAL,1)*100;
+ const cats={};APPS.forEach(a=>cats[a.k]=(cats[a.k]||0)+a.m);
+ const col={"Làm việc":"--c1","Trình duyệt":"--c2","Giao tiếp":"--c3","Giải trí":"--c4","Khác":"--c6"};
+ const tot=Object.values(cats).reduce((a,b)=>a+b,0);let acc=0;
+ const grad=Object.entries(cats).map(([k,v])=>{const s=acc;acc+=v/tot*100;return `var(${col[k]}) ${s}% ${acc}%`}).join(",");
+ const max=Math.max(...WEEK.map(w=>w[1]));
+ return `<h1>Tổng quan hôm nay</h1><p class="sub">Chủ nhật, 01 tháng 11 2026 · Máy: LOPHONG-PC</p>
+ <div class="grid hero">
+  <div class="card"><h3>Thời gian dùng máy hôm nay</h3>
+   <div class="ring" id="ring" style="--p:${p}%"><div><strong id="tot">${hms(S.sec)}</strong><small>trên mục tiêu 8 giờ</small></div></div>
+   <div class="live"><span class="dot"></span><span>Đang dùng: <b>Visual Studio Code</b></span></div></div>
+  <div class="grid" style="align-content:start">
+   <div class="grid stats">
+    <div class="card stat"><span>Phiên hiện tại</span><b id="sess">${hms(S.sess)}</b><em>Bắt đầu 08:42</em></div>
+    <div class="card stat"><span>So với hôm qua</span><b>−12%</b><em>Ít hơn 58 phút</em></div>
+    <div class="card stat"><span>Lần mở khóa máy</span><b>9</b><em>Nghỉ dài nhất 38 phút</em></div>
+   </div>
+   <div class="card"><h3>Khung giờ hoạt động</h3><div class="heat">${[0,0,0,0,0,0,0,.1,.9,1,.8,.4,.2,.6,1,.9,.7,.5,.3,.6,.4,.1,0,0].map(v=>`<i style="opacity:${Math.max(v,.07)}" title="${v*60|0} phút"></i>`).join("")}</div><div class="hl"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div></div>
+  </div>
+ </div>
+ <div class="card focus"><div><h3 style="margin:0 0 4px">Phiên tập trung</h3><span class="t">Chặn thông báo và nhắc bạn nghỉ khi hết giờ.</span></div>
+  <div style="display:flex;gap:12px;align-items:center"><big id="fc">${S.focus===null?"25:00":pad(Math.floor(S.focus/60))+":"+pad(S.focus%60)}</big><button class="btn p" id="fbtn">${S.focus===null?"Bắt đầu 25 phút":"Dừng phiên"}</button></div></div>
+ <div class="grid two">
+  <div class="card"><h3>7 ngày gần nhất (giờ)</h3><div class="bars">${WEEK.map((w,i)=>`<div class="bar ${i===6?"today":""}"><span>${w[1].toFixed(1)}</span><i style="height:${w[1]/max*100*.78}%"></i><span>${w[0]}</span></div>`).join("")}</div></div>
+  <div class="card"><h3>Theo nhóm ứng dụng</h3><div class="donut"><div class="dn" style="background:conic-gradient(${grad})"></div><div class="lg">${Object.entries(cats).map(([k,v])=>`<div><i style="background:var(${col[k]})"></i>${k} · ${Math.round(v/tot*100)}%</div>`).join("")}</div></div></div>
+ </div>
+ <div class="card" style="margin-top:14px"><h3>Ứng dụng dùng nhiều nhất</h3>${appRows(4)}</div>`}
+
+const BASE=[0,0,0,0,0,0,0,.2,.8,1,.9,.5,.3,.6,1,.9,.7,.5,.3,.5,.4,.1,0,0];
+const DET=[
+{p:"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",v:"130.0",o:14,cpu:"6%",ram:"1,8 GB",run:1,ti:[["GitHub – kho mã nguồn",52],["YouTube",38],["Stack Overflow",27],["Gmail",24],["Microsoft Learn – tài liệu .NET",20]],se:[["08:15–09:02",47,"GitHub – kho mã nguồn"],["10:20–11:05",45,"YouTube"],["13:40–14:28",48,"Stack Overflow"]]},
+{p:"C:\\Users\\Phong\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",v:"1.95",o:6,cpu:"9%",ram:"1,1 GB",run:1,ti:[["main.c",44],["index.html",38],["views.py",31],["plugin.php",19]],se:[["08:42–đang chạy",84,"index.html"],["07:50–08:30",40,"main.c"],["14:10–14:18",8,"views.py"]]},
+{p:"C:\\Users\\Phong\\AppData\\Local\\Programs\\Zalo\\Zalo.exe",v:"24.9",o:17,cpu:"2%",ram:"420 MB",run:1,ti:[["Nhóm công việc",27],["Trò chuyện cá nhân",14],["Nhóm khách hàng",7]],se:[["09:05–09:21",16,"Nhóm công việc"],["12:30–12:44",14,"Trò chuyện cá nhân"],["16:02–16:12",10,"Nhóm khách hàng"]]},
+{p:"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE",v:"16.0",o:5,cpu:"1%",ram:"260 MB",run:0,ti:[["Báo giá tháng 11.docx",18],["Hợp đồng mẫu.docx",12],["Ghi chú họp.docx",6]],se:[["10:00–10:18",18,"Báo giá tháng 11.docx"],["15:20–15:32",12,"Hợp đồng mẫu.docx"],["17:05–17:11",6,"Ghi chú họp.docx"]]},
+{p:"C:\\Users\\Phong\\AppData\\Roaming\\Spotify\\Spotify.exe",v:"1.2",o:3,cpu:"1%",ram:"310 MB",run:1,ti:[["Lofi Focus",14],["Daily Mix 1",10],["Chill Vietnam",7]],se:[["08:40–09:10",30,"Lofi Focus"],["13:00–13:01",1,"Daily Mix 1"]]},
+{p:"C:\\Windows\\explorer.exe",v:"Windows 11 23H2",o:21,cpu:"<1%",ram:"140 MB",run:1,ti:[["Downloads",5],["Documents",4],["Desktop",3]],se:[["09:30–09:36",6,"Downloads"],["11:10–11:14",4,"Documents"],["14:50–14:52",2,"Desktop"]]}
+];
+function appDetail(i){const a=APPS[i],d=DET[i],m=Math.floor(a.m);
+ const wk=[1.1,1.3,.9,1.2,1,.6].map(f=>+(a.m/60*f).toFixed(1)).concat([+(a.m/60).toFixed(1)]);
+ const mx=Math.max(...wk),y=wk[5]*60,df=Math.round((m-y)/y*100),avg=Math.round(m/d.o),lg=Math.max(...d.se.map(s=>s[1])),pc=Math.round(a.m/(S.sec/60)*100);
+ const heat=BASE.map((b,h)=>b*(.55+((h*7+i*3)%5)/8));
+ const kv=(k,v)=>`<div class="kv"><span class="t">${k}</span><span>${v}</span></div>`;
+ return `<button class="back" id="back">← Tất cả ứng dụng</button>
+ <div class="ah"><div class="ic" style="width:52px;height:52px;font-size:16px;border-radius:12px;background:var(${a.c})">${a.l}</div><div><h1>${a.n}</h1><div class="t">${a.k} · Chiếm ${pc}% thời gian hôm nay</div></div><div class="st">${d.run?'<span class="dot"></span>Đang chạy':'<span class="off"></span>Đã đóng'}</div></div>
+ <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+  <div class="card stat"><span>Hôm nay</span><b data-app="${a.n}">${hm(m)}</b><em style="color:${df>0?'var(--warn)':'var(--acc)'}">${df>0?'Nhiều hơn':'Ít hơn'} hôm qua ${Math.abs(df)}%</em></div>
+  <div class="card stat"><span>Số lần mở</span><b>${d.o}</b><em>Tính từ 00:00</em></div>
+  <div class="card stat"><span>Phiên trung bình</span><b>${avg} phút</b><em>Mỗi lần mở</em></div>
+  <div class="card stat"><span>Phiên dài nhất</span><b>${lg} phút</b><em>Hôm nay</em></div>
+ </div>
+ <div class="grid two">
+  <div class="card"><h3>7 ngày gần nhất (giờ)</h3><div class="bars">${wk.map((v,k)=>`<div class="bar ${k===6?'today':''}"><span>${v.toFixed(1)}</span><i style="height:${v/mx*78}%;${k===6?'':''}"></i><span>${WEEK[k][0]}</span></div>`).join('')}</div></div>
+  <div class="card"><h3>Khung giờ sử dụng</h3><div class="heat">${heat.map(v=>`<i style="opacity:${Math.max(v,.07)};background:var(${a.c})" title="${Math.round(v*a.m/6)} phút"></i>`).join('')}</div><div class="hl"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div></div>
+ </div>
+ <div class="grid two">
+  <div class="card"><h3>Các phiên gần nhất</h3>${d.se.map(s=>`<div class="row" style="grid-template-columns:130px 1fr auto"><span class="t">${s[0]}</span><span>${s[2]}</span><span class="t">${s[1]} phút</span></div>`).join('')}</div>
+  <div class="card"><h3>Cửa sổ / nội dung dùng nhiều</h3>${d.ti.map(t=>`<div style="padding:6px 0"><div style="display:flex;justify-content:space-between;gap:10px"><span>${t[0]}</span><span class="t">${t[1]} phút</span></div><div class="meter"><i style="width:${t[1]/d.ti[0][1]*100}%;background:var(${a.c})"></i></div></div>`).join('')}</div>
+ </div>
+ <div class="grid two" style="grid-template-columns:1fr 1fr">
+  <div class="card"><h3>Giới hạn hằng ngày</h3><div class="t" style="margin-bottom:10px">${limSt(i)[1]}</div>${limBlock(i)}</div>
+  <div class="card"><h3>Thông tin ứng dụng</h3>${kv('Phiên bản',d.v)}${kv('CPU trung bình',d.cpu)}${kv('RAM trung bình',d.ram)}${kv('Tổng 30 ngày',hm(Math.round(a.m*26)))}${kv('Đường dẫn',d.p)}</div>
+ </div>`}
+function apps(){if(S.app!==null)return appDetail(S.app);return `<h1>Ứng dụng</h1><p class="sub">Thời gian từng ứng dụng được dùng hôm nay. Chọn một ứng dụng để xem chi tiết.</p>
+ <div class="card tw"><table><thead><tr><th>Ứng dụng</th><th>Nhóm</th><th>Thời gian</th><th>Tỉ lệ</th><th>Giới hạn</th></tr></thead><tbody>
+ ${APPS.map((a,i)=>`<tr data-open="${i}"><td><div style="display:flex;gap:10px;align-items:center"><div class="ic" style="background:var(${a.c})">${a.l}</div>${a.n}</div></td><td class="t">${a.k}</td><td class="t" data-app="${a.n}">${hm(a.m)}</td><td style="min-width:120px"><div class="meter"><i style="width:${a.m/(S.sec/60)*100}%;background:var(${a.c})"></i></div></td><td class="t">${S.limOn[i]?hm(S.lim[i]):"Không"}</td></tr>`).join("")}</tbody></table></div>`}
+
+function hist(){const days=[["Chủ nhật 01/11","Hôm nay",S.sec/3600],["Thứ bảy 31/10","",3.2],["Thứ sáu 30/10","",6.9],["Thứ năm 29/10","",8.1],["Thứ tư 28/10","",5.5],["Thứ ba 27/10","",7.2],["Thứ hai 26/10","",6.4]];
+ return `<h1>Lịch sử</h1><p class="sub">Tổng thời gian dùng máy theo ngày.</p>
+ <div class="card">${days.map(d=>`<div class="row" style="grid-template-columns:150px 1fr 90px"><div>${d[0]}<div class="t">${d[1]}</div></div><div class="meter" style="height:10px;margin:0"><i style="width:${Math.min(d[2]/10,1)*100}%;background:${d[2]>8?"var(--warn)":"var(--acc)"}"></i></div><div class="t" style="text-align:right">${Math.floor(d[2])} giờ ${pad(Math.round(d[2]%1*60))} phút</div></div>`).join("")}</div>
+ <div class="grid stats" style="margin-top:14px"><div class="card stat"><span>Trung bình 7 ngày</span><b>5 giờ 53 phút</b></div><div class="card stat"><span>Ngày dùng nhiều nhất</span><b>Thứ năm</b><em>8 giờ 06 phút</em></div><div class="card stat"><span>Số ngày đạt mục tiêu</span><b>5 / 7</b></div></div>`}
+
+function set(){return `<h1>Cài đặt</h1><p class="sub">Tùy chỉnh cách ứng dụng theo dõi và nhắc nhở.</p><div class="card" style="margin-bottom:14px"><h3>Tài khoản</h3><div class="kv"><span class="t">Tên</span><span>${esc(S.user.name)}</span></div><div class="kv"><span class="t">Email</span><span>${esc(S.user.email)}</span></div><div class="kv"><span class="t">Vai trò</span><span>${S.user.role}</span></div><button class="btn" id="lo2" style="margin-top:10px">Đăng xuất</button></div>
+ <div class="card">
+ <div class="set"><div>Khởi động cùng Windows<small>Tự chạy ngầm khi bạn đăng nhập.</small></div><label class="sw"><input type="checkbox" id="s1" ${S.autostart?"checked":""}><b></b></label></div>
+ <div class="set"><div>Nhắc nghỉ giải lao<small>Hiện thông báo khi bạn dùng máy liên tục.</small></div><label class="sw"><input type="checkbox" id="s2" ${S.rem?"checked":""}><b></b></label></div>
+ <div class="set"><div>Nhắc sau mỗi<small>Khoảng thời gian dùng máy liên tục.</small></div><select id="s3">${[20,30,45,60].map(v=>`<option value="${v}" ${S.every===v?"selected":""}>${v} phút</option>`).join("")}</select></div>
+ <div class="set"><div>Thử thông báo<small>Xem thông báo nhắc nghỉ trông như thế nào.</small></div><button class="btn" id="s4">Gửi thử</button></div>
+ <div class="set"><div>Xóa dữ liệu theo dõi<small>Dữ liệu demo chỉ nằm trên trang này.</small></div><button class="btn" id="s5">Xóa dữ liệu</button></div></div>`}
+
+function render(){
+ $("#auth").style.display=S.user?"none":"flex";
+ if(!S.user){drawAuth();return}
+ $("#kid").style.display=S.kidMode?"flex":"none";if(S.kidMode){drawKid();return}
+ $("#main").innerHTML={home,apps,hist,lim:limits,set,dev:devices,par:parental}[S.view]();
+ if(S.anim){const m=$("#main");m.classList.remove("go");void m.offsetWidth;m.classList.add("go");S.anim=0}else $("#main").classList.remove("go");
+ const q=s=>document.querySelector(s);
+ document.querySelectorAll("[data-open]").forEach(r=>r.onclick=()=>{S.view="apps";S.app=+r.dataset.open;S.anim=1;drawNav();render();$("#main").scrollTop=0});
+ bindExtra();if(S.view==="apps"&&S.app!==null){const i=S.app;q("#back").onclick=()=>{S.app=null;S.anim=1;render()};}
+ if(S.view==="home")q("#fbtn").onclick=()=>{S.focus=S.focus===null?1500:null;toast(S.focus===null?"Đã dừng phiên tập trung.":"Bắt đầu phiên tập trung 25 phút.");render()};
+
+ if(S.view==="set"){q("#s1").onchange=e=>S.autostart=e.target.checked;q("#s2").onchange=e=>S.rem=e.target.checked;q("#s3").onchange=e=>S.every=+e.target.value;
+  q("#s4").onclick=()=>toast("Bạn đã dùng máy "+hm(Math.floor(S.sess/60))+" liên tục. Hãy nghỉ mắt 5 phút nhé!");
+  q("#s5").onclick=()=>toast("Đã xóa dữ liệu demo (giả lập).")}}
+
+setInterval(()=>{S.sec++;S.sess++;APPS[1].m+=1/60;
+ if(S.focus!==null){S.focus--;if(S.focus<=0){S.focus=null;toast("Hết phiên tập trung! Nghỉ 5 phút nhé.");if(S.view==="home")render()}}
+ const g=id=>document.getElementById(id);
+ if(S.view==="home"&&g("tot")){g("tot").textContent=hms(S.sec);g("sess").textContent=hms(S.sess);g("ring").style.setProperty("--p",Math.min(S.sec/GOAL,1)*100+"%");
+  if(S.focus!==null)g("fc").textContent=pad(Math.floor(S.focus/60))+":"+pad(S.focus%60)}
+ document.querySelectorAll('[data-app="Visual Studio Code"]').forEach(e=>e.textContent=hm(Math.floor(APPS[1].m)));
+ tickExtra();if(S.rem&&S.user&&S.sess%(S.every*60)===0)toast("Đã đến lúc nghỉ giải lao. Hãy đứng dậy vận động một chút!");
+},1000);
+drawNav();render();
+</script>
+</body>
+</html>

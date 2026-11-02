@@ -3,6 +3,16 @@
 // Dong bo font cua Chart.js voi font dang chon (--app-font),
 // neu khong Chart.js se dung font mac dinh rieng, khong khop
 // voi giao dien.
+const UI_THEME = (() => {
+    const styles = getComputedStyle(document.documentElement);
+    return {
+        accent: styles.getPropertyValue('--ui-accent').trim() || '#0b7a75',
+        line: styles.getPropertyValue('--ui-line').trim() || '#e1e5ea',
+        muted: styles.getPropertyValue('--ui-muted').trim() || '#667180',
+        text: styles.getPropertyValue('--ui-text').trim() || '#17202a',
+    };
+})();
+
 (function syncChartFont() {
     const appFont = getComputedStyle(document.documentElement)
         .getPropertyValue('--app-font')
@@ -10,7 +20,7 @@
 
     if (appFont && window.Chart) {
         Chart.defaults.font.family = appFont;
-        Chart.defaults.color = '#7e9ac0';
+        Chart.defaults.color = UI_THEME.muted;
     }
 })();
 
@@ -31,7 +41,7 @@ function fmtBytesPerSec(bps) {
 function gaugeColor(value, threshold) {
     if (value >= threshold) return '#ef4444';
     if (value >= threshold * 0.75) return '#f5a524';
-    return '#22c55e';
+    return UI_THEME.accent;
 }
 
 // ---------------- View switching (đọc ?view= từ URL) ----------------
@@ -101,7 +111,7 @@ function createGauge(canvasId) {
         data: {
             datasets: [{
                 data: [0, 100],
-                backgroundColor: ['#22c55e', '#12294a'],
+                backgroundColor: [UI_THEME.accent, UI_THEME.line],
                 borderWidth: 0,
             }]
         },
@@ -149,8 +159,8 @@ function pushSpark(chart, value) {
     chart.update('none');
 }
 
-const sparkCpu = createSparkline('sparkCpu', '#2f7de1');
-const sparkRam = createSparkline('sparkRam', '#5aa9ff');
+const sparkCpu = createSparkline('sparkCpu', UI_THEME.accent);
+const sparkRam = createSparkline('sparkRam', '#3b6fd4');
 const sparkDisk = createSparkline('sparkDisk', '#f5a524');
 const sparkNet = createSparkline('sparkNet', '#22c55e');
 
@@ -183,10 +193,10 @@ function createLineChart(canvasId, datasetsConfig, yOptions) {
             animation: { duration: 400, easing: 'easeOutQuart' },
             interaction: { intersect: false },
             scales: {
-                y: Object.assign({ ticks: { color: '#7e9ac0' }, grid: { color: '#1c3a5e' } }, yOptions || {}),
-                x: { ticks: { color: '#7e9ac0', maxTicksLimit: 8 }, grid: { display: false } }
+                y: Object.assign({ ticks: { color: UI_THEME.muted }, grid: { color: UI_THEME.line } }, yOptions || {}),
+                x: { ticks: { color: UI_THEME.muted, maxTicksLimit: 8 }, grid: { display: false } }
             },
-            plugins: { legend: { labels: { color: '#dce8f7' } } }
+            plugins: { legend: { labels: { color: UI_THEME.text } } }
         }
     });
 }
@@ -207,16 +217,16 @@ function pushPoint(chart, label, values) {
 const MAX_POINTS = 60;
 
 const historyChart = createLineChart('historyChart', [
-    { label: 'CPU %', color: '#2f7de1' },
-    { label: 'RAM %', color: '#5aa9ff' },
+    { label: 'CPU %', color: UI_THEME.accent },
+    { label: 'RAM %', color: '#3b6fd4' },
 ], { min: 0, max: 100 });
 
 const cpuHistoryChart = createLineChart('cpuHistoryChart', [
-    { label: 'CPU %', color: '#2f7de1' },
+    { label: 'CPU %', color: UI_THEME.accent },
 ], { min: 0, max: 100 });
 
 const ramHistoryChart = createLineChart('ramHistoryChart', [
-    { label: 'RAM %', color: '#5aa9ff' },
+    { label: 'RAM %', color: '#3b6fd4' },
     { label: 'Swap %', color: '#f5a524' },
 ], { min: 0, max: 100 });
 
@@ -978,14 +988,14 @@ async function loadCloudData(range) {
             type: 'bar',
             data: {
                 labels: apps.map(a => a.process_name),
-                datasets: [{ label: 'Seconds', data: apps.map(a => a.total_seconds), backgroundColor: '#2f7de1', borderRadius: 6 }]
+                datasets: [{ label: 'Seconds', data: apps.map(a => a.total_seconds), backgroundColor: UI_THEME.accent, borderRadius: 6 }]
             },
             options: {
                 indexAxis: 'y',
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { color: '#7e9ac0' }, grid: { color: '#1c3a5e' } },
-                    y: { ticks: { color: '#dce8f7' }, grid: { display: false } }
+                    x: { ticks: { color: UI_THEME.muted }, grid: { color: UI_THEME.line } },
+                    y: { ticks: { color: UI_THEME.text }, grid: { display: false } }
                 }
             }
         });
@@ -1000,13 +1010,13 @@ async function loadCloudData(range) {
             type: 'bar',
             data: {
                 labels: dailyData.days || [],
-                datasets: [{ label: 'Total seconds', data: dailyData.totals || [], backgroundColor: '#5aa9ff', borderRadius: 6 }]
+                datasets: [{ label: 'Total seconds', data: dailyData.totals || [], backgroundColor: UI_THEME.accent, borderRadius: 6 }]
             },
             options: {
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { color: '#7e9ac0' }, grid: { display: false } },
-                    y: { ticks: { color: '#7e9ac0' }, grid: { color: '#1c3a5e' } }
+                    x: { ticks: { color: UI_THEME.muted }, grid: { display: false } },
+                    y: { ticks: { color: UI_THEME.muted }, grid: { color: UI_THEME.line } }
                 }
             }
         });
@@ -1072,8 +1082,8 @@ async function loadLocalData() {
                 indexAxis: 'y',
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { color: '#7e9ac0' }, grid: { color: '#1c3a5e' } },
-                    y: { ticks: { color: '#dce8f7' }, grid: { display: false } }
+                    x: { ticks: { color: UI_THEME.muted }, grid: { color: UI_THEME.line } },
+                    y: { ticks: { color: UI_THEME.text }, grid: { display: false } }
                 }
             }
         });
@@ -1490,8 +1500,8 @@ async function loadFamilyChildSummary() {
                 indexAxis: 'y',
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { color: '#7e9ac0' }, grid: { color: '#1c3a5e' } },
-                    y: { ticks: { color: '#dce8f7' }, grid: { display: false } }
+                    x: { ticks: { color: UI_THEME.muted }, grid: { color: UI_THEME.line } },
+                    y: { ticks: { color: UI_THEME.text }, grid: { display: false } }
                 }
             }
         });
