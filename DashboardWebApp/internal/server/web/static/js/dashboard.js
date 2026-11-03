@@ -47,6 +47,9 @@ function gaugeColor(value, threshold) {
 // ---------------- View switching (đọc ?view= từ URL) ----------------
 
 function activateView(view) {
+    const views = ['overview', 'cpu', 'ram', 'disk', 'network', 'local', 'cloud', 'devices', 'family'];
+    if (!views.includes(view)) view = 'overview';
+
     document.querySelectorAll('.sidebar-view-link').forEach(l => {
         l.classList.toggle('active', l.dataset.view === view);
     });
@@ -55,6 +58,9 @@ function activateView(view) {
 
     const target = document.getElementById(`view-${view}`);
     if (target) target.style.display = 'block';
+
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle) pageTitle.textContent = VIEW_TITLES[view];
 
     if (view === 'cloud') loadCloudData(currentRange);
     if (view === 'local') loadLocalData();

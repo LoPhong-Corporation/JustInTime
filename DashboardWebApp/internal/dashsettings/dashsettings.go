@@ -32,6 +32,7 @@ type Settings struct {
 	// "last_week". Không hỗ trợ "custom" làm mặc định (cần ngày cụ
 	// thể, không có ý nghĩa cố định).
 	DefaultPeriod string `json:"default_period"`
+	DailyGoalMin  int    `json:"daily_goal_min"`
 
 	// Only ever sent to generativelanguage.googleapis.com when the
 	// user explicitly clicks "Generate Insights" — never used
@@ -53,6 +54,7 @@ type onDiskSettings struct {
 	DiskThreshold int    `json:"disk_threshold"`
 	TimeFormat    string `json:"time_format"`
 	DefaultPeriod string `json:"default_period"`
+	DailyGoalMin  int    `json:"daily_goal_min"`
 
 	// Base64 of the DPAPI-protected key (Windows-user-scoped — see
 	// internal/secure). Empty/absent if no key has been set.
@@ -75,6 +77,7 @@ func Defaults() Settings {
 		DiskThreshold: 90,
 		TimeFormat:    "24h",
 		DefaultPeriod: "today",
+		DailyGoalMin:  480,
 	}
 }
 
@@ -122,6 +125,12 @@ func Load() Settings {
 	if v, ok := data["default_period"]; ok {
 		_ = json.Unmarshal(v, &out.DefaultPeriod)
 	}
+	if v, ok := data["daily_goal_min"]; ok {
+		_ = json.Unmarshal(v, &out.DailyGoalMin)
+	}
+	if out.DailyGoalMin < 30 || out.DailyGoalMin > 1440 {
+		out.DailyGoalMin = Defaults().DailyGoalMin
+	}
 
 	if v, ok := data["gemini_api_key_enc"]; ok {
 		var encB64 string
@@ -166,6 +175,7 @@ func Save(s Settings) error {
 		DiskThreshold: s.DiskThreshold,
 		TimeFormat:    s.TimeFormat,
 		DefaultPeriod: s.DefaultPeriod,
+		DailyGoalMin:  s.DailyGoalMin,
 	}
 
 	if s.GeminiAPIKey != "" {

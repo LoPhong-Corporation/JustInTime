@@ -3,637 +3,335 @@
 <html lang="{{.DS.Language}}">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{.T.app_title}}</title>
     <link rel="stylesheet" href="/static/style.css">
-    <style>
-        :root { --app-font: {{css .FontStack}}; }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>:root { --app-font: {{css .FontStack}}; }</style>
 </head>
-<body>
+<body class="app-page time-app" data-default-period="{{.DS.DefaultPeriod}}" data-time-format="{{.DS.TimeFormat}}" data-goal-min="{{.DS.DailyGoalMin}}">
+    <div class="time-shell">
+        <header class="time-titlebar">
+            <a class="time-brand" href="/" aria-label="JustInTime home">
+                <span class="time-brand-mark" aria-hidden="true"></span>
+                <strong>JustInTime</strong>
+                <span class="time-titlebar-caption">Screen time</span>
+            </a>
+            <div class="time-account">
+                <button type="button" class="time-theme-toggle" id="theme-toggle" aria-label="Toggle color theme">
+                    <svg class="time-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+                </button>
+                {{if .LoggedIn}}
+                    <span class="time-account-email">{{.CurrentEmail}}</span>
+                    <a href="/logout" class="time-account-link">{{.T.logout}}</a>
+                {{else}}
+                    <span class="time-account-state">Local tracking</span>
+                    <a href="/login" class="time-account-link">{{.T.login}}</a>
+                {{end}}
+            </div>
+        </header>
 
-    <div class="app-shell">
-
-        <div class="sidebar no-print">
-            <div class="brand"><span class="dot"></span>JustInTime</div>
-            <nav>
-                <a href="/?view=overview" class="nav-link sidebar-view-link" data-view="overview">
-                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-                    {{.T.nav_system}}
-                </a>
-                <a href="/?view=cpu" class="nav-link sidebar-view-link" data-view="cpu">
-                    <svg class="icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>
-                    CPU
-                </a>
-                <a href="/?view=ram" class="nav-link sidebar-view-link" data-view="ram">
-                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M7 7v10M11 7v10M15 7v10"/></svg>
-                    Memory
-                </a>
-                <a href="/?view=disk" class="nav-link sidebar-view-link" data-view="disk">
-                    <svg class="icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
-                    Disk
-                </a>
-                <a href="/?view=network" class="nav-link sidebar-view-link" data-view="network">
-                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v5M12 12.5 6.7 17M12 12.5l5.3 4.5"/></svg>
-                    Network
-                </a>
-                <a href="/?view=local" class="nav-link sidebar-view-link" data-view="local">
-                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h4"/></svg>
-                    {{.T.nav_local}}
-                </a>
-                <a href="/?view=cloud" class="nav-link sidebar-view-link" data-view="cloud">
-                    <svg class="icon" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 7 9.1 4 4 0 0 0 7 18z"/></svg>
-                    {{.T.nav_cloud}}
-                </a>
-                <a href="/?view=devices" class="nav-link sidebar-view-link" data-view="devices">
-                    <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 18h6"/><rect x="18" y="8" width="4" height="8" rx="1"/></svg>
-                    {{.T.nav_devices}}
-                </a>
-                <a href="/?view=family" class="nav-link sidebar-view-link" data-view="family">
-                    <svg class="icon" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21v-1a6 6 0 0 1 12 0v1"/><path d="M14.5 21v-.7a5 5 0 0 1 7.5-4.3"/></svg>
-                    {{.T.nav_family}}
-                </a>
-                <a href="/settings" class="nav-link settings-link">
-                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c.16.5.62.86 1.15 1H21a2 2 0 1 1 0 4h-.09c-.53.14-.99.5-1.15 1z"/></svg>
-                    {{.T.nav_settings}}
-                </a>
-            </nav>
-        </div>
-
-        <div class="main-area">
-            <div class="topbar no-print">
-                <h1>{{.T.app_title}}</h1>
-                <div class="search-wrap">
-                    <input type="text" id="global-search" placeholder="Search processes…" autocomplete="off">
+        <div class="time-layout">
+            <aside class="time-sidebar" aria-label="Main navigation">
+                <div class="time-nav-label">YOUR ACTIVITY</div>
+                <nav>
+                    <a href="/?view=overview" class="time-nav-link" data-view="overview"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>Overview</a>
+                    <a href="/?view=apps" class="time-nav-link" data-view="apps"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></svg>Applications</a>
+                    <a href="/?view=history" class="time-nav-link" data-view="history"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>History</a>
+                </nav>
+                <div class="time-nav-label time-nav-spaced">MANAGE</div>
+                <nav>
+                    <a href="/?view=limits" class="time-nav-link" data-view="limits"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12M6 21h12M8 3c0 5 4 6 4 9s-4 4-4 9m8-18c0 5-4 6-4 9s4 4 4 9"/></svg>App limits</a>
+                    <a href="/?view=insights" class="time-nav-link" data-view="insights"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2m0 14v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M3 12h2m14 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/><circle cx="12" cy="12" r="4"/></svg>AI insights &amp; chat</a>
+                </nav>
+                <div class="time-nav-label time-nav-spaced">CONNECTED</div>
+                <nav>
+                    <a href="/?view=cloud" class="time-nav-link" data-view="cloud"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 7 9.1 4 4 0 0 0 7 18Z"/><path d="m9 13 3-3 3 3m-3-3v7"/></svg>Synced activity</a>
+                    <a href="/?view=devices" class="time-nav-link" data-view="devices"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>Devices</a>
+                    <a href="/?view=family" class="time-nav-link" data-view="family"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1m2-9a3 3 0 1 0-1-5.8M18 14a5 5 0 0 1 3 4.6v1"/></svg>Family &amp; limits</a>
+                </nav>
+                <div class="time-sidebar-bottom">
+                    <a href="/settings" class="time-nav-link"><svg class="time-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a7.8 7.8 0 0 1-1.6.9l-.3 1.8h-2.8l-.3-1.8a7.8 7.8 0 0 1-1.6-.9l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.9l-1.4-1.1 1.4-2.4 1.7.7a7.8 7.8 0 0 1 1.6-.9l.3-1.8h2.8l.3 1.8a7.8 7.8 0 0 1 1.6.9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.9Z"/></svg>Settings</a>
+                    <div class="time-sidebar-note">Activity is stored locally on this device. Sign in to use sync and family features.</div>
                 </div>
-                <div class="user-info">
-                    <span class="status-badge" id="status-badge"><span class="dot"></span><span id="status-text">Running</span></span>
-                    {{if .LoggedIn}}
-                        <span>{{.CurrentEmail}}</span>
-                        <a class="logout" href="/logout">{{.T.logout}}</a>
-                    {{else}}
-                        <a class="logout" href="/login">{{.T.login}}</a>
-                    {{end}}
+            </aside>
+
+            <main class="time-main">
+                <div class="time-page-head">
+                    <div>
+                        <div class="time-eyebrow" id="page-eyebrow">YOUR SCREEN TIME</div>
+                        <h1 id="page-title">Overview</h1>
+                        <p id="page-subtitle">A clear view of how you spend time on this device.</p>
+                    </div>
+                    <div class="time-page-date" id="today-label"></div>
                 </div>
-            </div>
+                <div id="app-notice" class="time-notice" role="status" hidden></div>
 
-            <div class="container">
+                <section id="view-overview" class="time-view" aria-label="Overview">
+                    <div class="time-overview-top">
+                        <article class="time-card time-total-card">
+                            <div class="time-card-topline">
+                                <div>
+                                    <div class="time-card-label">TODAY'S SCREEN TIME</div>
+                                    <div class="time-card-help">Tracked activity on this device</div>
+                                </div>
+                                <span class="time-soft-icon" aria-hidden="true"><svg class="time-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+                            </div>
+                            <div class="time-total" id="today-total">—</div>
+                            <div class="time-goal-track"><span id="goal-progress"></span></div>
+                            <div class="time-goal-caption"><span id="goal-caption">Daily goal</span><button type="button" id="edit-goal">Edit goal</button></div>
+                            <div class="time-total-foot"><span class="time-live-dot"></span><span id="tracking-status">Loading activity</span></div>
+                        </article>
+                        <article class="time-card time-stat-card">
+                            <div class="time-card-label">APPS USED TODAY</div>
+                            <div class="time-stat-number" id="today-app-count">—</div>
+                            <div class="time-stat-caption">Applications with recorded activity</div>
+                            <div class="time-stat-icon" aria-hidden="true"><svg class="time-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></div>
+                        </article>
+                        <article class="time-card time-stat-card">
+                            <div class="time-card-label">MOST USED APP</div>
+                            <div class="time-stat-app" id="most-used-app">—</div>
+                            <div class="time-stat-caption" id="most-used-duration">No activity recorded yet</div>
+                            <div class="time-stat-icon" aria-hidden="true"><svg class="time-icon" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></div>
+                        </article>
+                    </div>
 
-    <!-- ============ OVERVIEW ============ -->
-    <div id="view-overview" class="dash-view">
-
-        <!-- Fleet status: Online/Offline/Warning/Critical across every machine on the account -->
-        <div class="fleet-row">
-            <div class="fleet-card online">
-                <span class="fleet-dot"></span>
-                <div><div class="fleet-count" id="fleet-online-count">-</div><div class="fleet-label">Online</div></div>
-            </div>
-            <div class="fleet-card offline">
-                <span class="fleet-dot"></span>
-                <div><div class="fleet-count" id="fleet-offline-count">-</div><div class="fleet-label">Offline</div></div>
-            </div>
-            <div class="fleet-card warning">
-                <span class="fleet-dot"></span>
-                <div><div class="fleet-count" id="fleet-warning-count">-</div><div class="fleet-label">Warning</div></div>
-            </div>
-            <div class="fleet-card critical">
-                <span class="fleet-dot"></span>
-                <div><div class="fleet-count" id="fleet-critical-count">-</div><div class="fleet-label">Critical</div></div>
-            </div>
-        </div>
-
-        <!-- REORDERED (theo yêu cầu): 1) thời gian dùng máy trước tiên,
-             2) danh sách máy, 3) mọi thứ còn lại (CPU/RAM/Disk/Network,
-             hiệu năng, alert, tiến trình, cấu hình...) xuống dưới cùng. -->
-
-        <!-- 1) Activity Timeline: thanh 24h trực quan (chỉ với chế độ
-             1 ngày) hoặc biểu đồ cột theo ngày (chế độ nhiều ngày -
-             tuần này/tuần trước/tuỳ chọn), dùng /api/local/period +
-             /api/local/timeline. Danh sách text cũ (loadActivityTimeline)
-             vẫn còn bên dưới cho ai muốn xem dạng danh sách/cuộn được. -->
-        <div class="section-title">
-            {{.T.timeline_title}}
-            <span style="font-weight:normal; font-size:11px; color:#5aa9ff; cursor:pointer;" id="timeline-today-label"></span>
-        </div>
-
-        <div class="panel" style="margin-bottom:14px; padding:10px 14px;">
-            <div id="period-picker" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-                <button type="button" class="period-btn active" data-period="today">{{.T.period_today}}</button>
-                <button type="button" class="period-btn" data-period="yesterday">{{.T.period_yesterday}}</button>
-                <button type="button" class="period-btn" data-period="this_week">{{.T.period_this_week}}</button>
-                <button type="button" class="period-btn" data-period="last_week">{{.T.period_last_week}}</button>
-                <button type="button" class="period-btn" data-period="custom">{{.T.period_custom}}</button>
-                <span id="period-custom-range" style="display:none; align-items:center; gap:6px; margin-left:4px;">
-                    <input type="date" id="period-custom-from" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:5px 8px;border-radius:6px;font-family:inherit;font-size:12px;">
-                    <span style="color:#4a6584; font-size:12px;">&ndash;</span>
-                    <input type="date" id="period-custom-to" style="background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:5px 8px;border-radius:6px;font-family:inherit;font-size:12px;">
-                    <button type="button" class="btn btn-outline" id="period-custom-apply" style="padding:5px 12px; font-size:12px;">{{.T.period_apply}}</button>
-                </span>
-            </div>
-        </div>
-
-        <div class="panel" style="margin-bottom:20px;">
-            <div id="timeline-visual-error"></div>
-
-            <!-- Chế độ 1 ngày: thanh 24h, zoom được (kéo dài trục ngang
-                 để xem chi tiết những khoảng thời gian đổi app dồn dập) -->
-            <div id="timeline-single-day-view">
-                <div class="timeline-zoom-toolbar">
-                    <button type="button" class="btn btn-outline" id="tl-zoom-out" title="{{.T.timeline_zoom_out}}">&minus;</button>
-                    <span id="tl-zoom-level">100%</span>
-                    <button type="button" class="btn btn-outline" id="tl-zoom-in" title="{{.T.timeline_zoom_in}}">+</button>
-                    <button type="button" class="btn btn-outline" id="tl-zoom-reset">{{.T.timeline_zoom_reset}}</button>
-                    <span style="color:#4a6584; font-size:11px; margin-left:auto;">{{.T.timeline_zoom_hint}}</span>
-                </div>
-                <div class="timeline-zoom-viewport" id="timeline-zoom-viewport">
-                    <div class="timeline-zoom-content" id="timeline-zoom-content">
-                        <div id="timeline-visual-strip" class="timeline-strip">
-                            <p style="color:#4a6584; font-size:13px;">{{.T.loading}}</p>
+                    <article class="time-card time-focus-card">
+                        <div><h2>Focus session</h2><p id="focus-status" aria-live="polite">Take a short break when your session ends.</p></div>
+                        <div class="time-focus-controls">
+                            <select id="focus-duration" aria-label="Focus session length">
+                                <option value="25">25 minutes</option><option value="50">50 minutes</option>
+                            </select>
+                            <strong id="focus-countdown">25:00</strong>
+                            <button type="button" class="time-button time-button-primary" id="focus-toggle">Start focus</button>
+                            <label class="time-check"><input id="focus-break-reminder" type="checkbox"> Break reminder</label>
                         </div>
-                        <div id="timeline-visual-ruler" class="timeline-ruler"></div>
+                    </article>
+
+                    <div class="time-content-grid">
+                        <article class="time-card">
+                            <div class="time-section-head">
+                                <div><h2>Usage this week</h2><p>Daily tracked time, Monday to Sunday</p></div>
+                                <a class="time-text-link" href="/?view=history">View history <svg class="time-inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+                            </div>
+                            <div class="time-week-chart" id="week-chart" aria-label="Daily usage this week"></div>
+                        </article>
+                        <article class="time-card">
+                            <div class="time-section-head">
+                                <div><h2>Top applications</h2><p>Today's most-used apps</p></div>
+                                <a class="time-text-link" href="/?view=apps">All apps <svg class="time-inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+                            </div>
+                            <div id="overview-apps" class="time-app-list"><div class="time-empty">Loading activity…</div></div>
+                        </article>
                     </div>
-                </div>
-            </div>
 
-            <!-- Chế độ nhiều ngày: cột tổng theo từng ngày -->
-            <div id="timeline-range-view" style="display:none;">
-                <div id="timeline-daily-bars" class="daily-bars"></div>
-            </div>
-
-            <div id="timeline-visual-legend" class="timeline-legend"></div>
-        </div>
-
-        <!-- 2) Machines: every device on this account, via device_heartbeats -->
-        <div class="section-title">Machines</div>
-        <div id="machines-error"></div>
-        <div class="panel" style="margin-bottom:20px;">
-            <div id="machines-list"><p style="color:#4a6584;">Loading…</p></div>
-        </div>
-
-        <!-- 3) Mọi thứ còn lại: số liệu CPU/RAM/Disk/Network, hiệu năng,
-             alert, tiến trình, agent status, cấu hình máy... -->
-        <div class="grid cols-4">
-            <div class="stat-card">
-                <div class="stat-card-head">
-                    <div>
-                        <div class="stat-title">CPU</div>
-                        <div class="stat-subtitle" id="card-cpu-subtitle">—</div>
+                    <div class="time-content-grid time-insights-grid">
+                        <article class="time-card">
+                            <div class="time-section-head"><div><h2>Active hours</h2><p>Tracked activity by hour today</p></div></div>
+                            <div class="time-hour-heatmap" id="hour-heatmap"></div>
+                            <div class="time-hour-labels"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span></div>
+                        </article>
+                        <article class="time-card">
+                            <div class="time-section-head"><div><h2>Usage by app type</h2><p>Categories are estimated from application names</p></div></div>
+                            <div class="time-category-chart" id="category-chart"></div>
+                        </article>
                     </div>
-                    <span class="stat-menu">&#8942;</span>
-                </div>
-                <div class="stat-percent" id="card-cpu-percent">--%</div>
-                <div class="stat-graph"><canvas id="sparkCpu"></canvas></div>
-                <div class="stat-updated" id="card-cpu-updated">—</div>
-            </div>
 
-            <div class="stat-card">
-                <div class="stat-card-head">
-                    <div>
-                        <div class="stat-title">Memory</div>
-                        <div class="stat-subtitle" id="card-ram-subtitle">—</div>
+                    <article class="time-card time-recent-card">
+                        <div class="time-section-head">
+                            <div><h2>Recent activity</h2><p>Latest recorded application sessions</p></div>
+                            <a class="time-text-link" href="/?view=history">Full history <svg class="time-inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+                        </div>
+                        <div class="time-table-wrap">
+                            <table class="time-table">
+                                <thead><tr><th>Application</th><th>Window</th><th>Duration</th><th>Started</th></tr></thead>
+                                <tbody id="overview-recent"><tr><td colspan="4" class="time-empty">Loading activity…</td></tr></tbody>
+                            </table>
+                        </div>
+                    </article>
+                </section>
+
+                <section id="view-apps" class="time-view" hidden aria-label="Applications">
+                    <article class="time-card" id="applications-panel">
+                        <div class="time-section-head time-apps-heading">
+                            <div><h2>Application usage</h2><p>Time tracked per application today on this device</p></div>
+                            <label class="time-search"><svg class="time-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="app-search" type="search" placeholder="Find an app" autocomplete="off"></label>
+                        </div>
+                        <div id="applications-list" class="time-app-list"><div class="time-empty">Loading activity…</div></div>
+                    </article>
+                    <div id="application-detail" hidden></div>
+                </section>
+
+                <section id="view-history" class="time-view" hidden aria-label="History">
+                    <article class="time-card">
+                        <div class="time-section-head time-history-heading">
+                            <div><h2>Usage history</h2><p>Review tracked time for a selected period</p></div>
+                            <div class="time-period-controls" role="group" aria-label="History period">
+                                <button type="button" class="time-period-btn" data-period="today">Today</button>
+                                <button type="button" class="time-period-btn" data-period="yesterday">Yesterday</button>
+                                <button type="button" class="time-period-btn" data-period="this_week">This week</button>
+                                <button type="button" class="time-period-btn" data-period="last_week">Last week</button>
+                            </div>
+                        </div>
+                        <div class="time-custom-range">
+                            <label>From <input type="date" id="history-from"></label>
+                            <label>To <input type="date" id="history-to"></label>
+                            <button type="button" class="time-button time-button-primary" id="history-apply">Apply dates</button>
+                            <a class="time-button time-action-link" id="history-export" href="/export/local.csv?period=today">Export CSV</a>
+                            <button type="button" class="time-button" id="history-print">Print view</button>
+                        </div>
+                        <div class="time-history-summary" id="history-summary">Select a period to view activity.</div>
+                        <div id="history-day-breakdown" class="time-history-days"></div>
+                        <div id="history-chart" class="time-week-chart time-history-chart"></div>
+                        <div id="history-rows" class="time-app-list time-history-table-wrap"><div class="time-empty">Loading activity…</div></div>
+                    </article>
+                </section>
+
+                <section id="view-cloud" class="time-view" hidden aria-label="Synced activity">
+                    <article class="time-card">
+                        <div class="time-section-head time-cloud-heading">
+                            <div><h2>Synced usage across your devices</h2><p>Activity uploaded to your JustInTime account. Local-only records are not included.</p></div>
+                            <div class="time-period-controls">
+                                <label class="sr-only" for="cloud-range">Date range</label>
+                                <select id="cloud-range" class="time-select"><option value="week">Last 7 days</option><option value="month">Last 30 days</option><option value="today">Today</option></select>
+                                <a class="time-button time-action-link" id="cloud-export" href="/export/csv?range=week">Export CSV</a>
+                                <a class="time-button time-action-link" id="cloud-report" href="/report?range=week" target="_blank" rel="noopener">Print report</a>
+                            </div>
+                        </div>
+                        <div id="cloud-message" class="time-inline-message" role="status" hidden></div>
+                        <div class="time-cloud-summary" id="cloud-summary"></div>
+                        <div class="time-cloud-grid">
+                            <section><h3>Usage by app</h3><div id="cloud-apps" class="time-app-list"><div class="time-empty">Select this page to load cloud data.</div></div></section>
+                            <section><h3>Daily usage</h3><div id="cloud-days" class="time-week-chart"></div></section>
+                        </div>
+                        <section class="time-cloud-recent"><h3>Recently synced activity</h3><div class="time-table-wrap"><table class="time-table"><thead><tr><th>Device</th><th>Application</th><th>Window</th><th>Duration</th><th>Started</th></tr></thead><tbody id="cloud-recent"><tr><td colspan="5" class="time-empty">Loading cloud activity…</td></tr></tbody></table></div></section>
+                    </article>
+                </section>
+
+                <section id="view-insights" class="time-view" hidden aria-label="AI insights and chat">
+                    <div class="time-ai-grid">
+                        <article class="time-card">
+                            <div class="time-section-head"><div><h2>AI usage insights</h2><p>Generate a one-time summary from your application usage. Nothing is sent until you click Generate.</p></div></div>
+                            <div class="time-ai-controls">
+                                <label class="time-field-label" for="insights-source">Data source</label>
+                                <select id="insights-source" class="time-select"><option value="local">This device (local)</option><option value="cloud">Synced account devices (cloud)</option></select>
+                                <button type="button" class="time-button time-button-primary" id="insights-generate">Generate insights</button>
+                            </div>
+                            <div class="time-inline-message" id="insights-message" role="status" hidden></div>
+                            <div id="insights-result" class="time-insights-result" hidden>
+                                <p id="insights-summary"></p>
+                                <h3>Applications</h3>
+                                <div class="time-table-wrap"><table class="time-table"><thead><tr><th>Application</th><th>Category</th><th>Note</th></tr></thead><tbody id="insights-apps"></tbody></table></div>
+                                <h3>Suggestions</h3><ul id="insights-recommendations"></ul>
+                            </div>
+                            <p class="time-ai-settings-hint">Configure your Gemini API key in <a href="/settings">Settings → AI Insights</a>.</p>
+                        </article>
+                        <article class="time-card">
+                            <div class="time-section-head"><div><h2>Ask about your usage</h2><p>Answers use this device’s local activity from the last 14 days.</p></div></div>
+                            <div id="chat-messages" class="time-ai-chat" aria-live="polite"><div class="time-ai-message model">Ask a question about your app usage.</div></div>
+                            <div class="time-inline-message" id="chat-message" role="status" hidden></div>
+                            <form id="usage-chat-form" class="time-message-form">
+                                <label class="sr-only" for="usage-chat-input">Question about your usage</label>
+                                <input id="usage-chat-input" maxlength="1000" placeholder="How much time did I spend in apps this week?" required>
+                                <button type="submit" class="time-button time-button-primary" id="usage-chat-send">Ask</button>
+                            </form>
+                        </article>
                     </div>
-                    <span class="stat-menu">&#8942;</span>
-                </div>
-                <div class="stat-percent" id="card-ram-percent">--%</div>
-                <div class="stat-graph"><canvas id="sparkRam"></canvas></div>
-                <div class="stat-updated" id="card-ram-updated">—</div>
-            </div>
+                </section>
 
-            <div class="stat-card">
-                <div class="stat-card-head">
-                    <div>
-                        <div class="stat-title">Disk</div>
-                        <div class="stat-subtitle" id="card-disk-subtitle">—</div>
+                <section id="view-limits" class="time-view" hidden aria-label="Application limits">
+                    <article class="time-card">
+                        <div class="time-section-head">
+                            <div><h2>Application limits</h2><p>Review and adjust limits for an approved family connection.</p></div>
+                        </div>
+                        <label class="time-field-label" for="limits-child-select">Family member</label>
+                        <select id="limits-child-select" class="time-select"><option value="">Loading approved connections…</option></select>
+                        <div id="limits-message" class="time-inline-message" hidden></div>
+                        <div id="limits-summary" class="time-limit-summary"></div>
+                        <form id="limits-form" class="time-limit-editor">
+                            <label>Application<input id="limits-app-name" required placeholder="e.g. game.exe"></label>
+                            <label>Daily limit (minutes)<input id="limits-app-minutes" type="number" min="1" max="1440" value="60"></label>
+                            <label class="time-check"><input id="limits-app-blocked" type="checkbox"> Block application</label>
+                            <button class="time-button time-button-primary" type="submit">Save limit</button>
+                        </form>
+                        <div id="limits-list" class="time-family-list"><div class="time-empty">Select an approved family member.</div></div>
+                    </article>
+                </section>
+
+                <section id="view-devices" class="time-view" hidden aria-label="Devices">
+                    <article class="time-card">
+                        <div class="time-section-head">
+                            <div><h2>Your devices</h2><p>Devices connected to your JustInTime account</p></div>
+                            <button type="button" class="time-button" id="devices-refresh">Refresh</button>
+                        </div>
+                        <div id="devices-message" class="time-inline-message" hidden></div>
+                        <div id="devices-list" class="time-device-list"><div class="time-empty">Sign in to load your devices.</div></div>
+                    </article>
+                    <article class="time-card time-device-chat">
+                        <div class="time-section-head"><div><h2>Inbox</h2><p>Messages sent to this device from your other devices.</p></div><button type="button" class="time-button" id="inbox-refresh">Refresh inbox</button></div>
+                        <div id="inbox-message" class="time-inline-message" role="status" hidden></div>
+                        <div id="device-inbox" class="time-inbox-list"><div class="time-empty">Sign in to load messages.</div></div>
+                    </article>
+                    <article class="time-card time-device-chat" id="device-chat" hidden>
+                        <div class="time-section-head"><div><h2 id="device-chat-title">Device messages</h2><p>Messages are relayed through your account.</p></div></div>
+                        <div id="device-messages" class="time-message-list"></div>
+                        <form id="device-message-form" class="time-message-form">
+                            <label class="sr-only" for="device-message-input">Message</label>
+                            <input id="device-message-input" maxlength="2000" placeholder="Write a message…" required>
+                            <button class="time-button time-button-primary" type="submit">Send</button>
+                        </form>
+                    </article>
+                </section>
+
+                <section id="view-family" class="time-view" hidden aria-label="Family controls">
+                    <div class="time-family-grid">
+                        <article class="time-card">
+                            <div class="time-section-head"><div><h2>Family connections</h2><p>Invite a family member or review incoming requests</p></div></div>
+                            <form id="family-invite-form" class="time-inline-form">
+                                <label class="sr-only" for="family-invite-email">Family member email</label>
+                                <input id="family-invite-email" type="email" placeholder="name@example.com" required>
+                                <button type="submit" class="time-button time-button-primary">Invite</button>
+                            </form>
+                            <div id="family-message" class="time-inline-message" hidden></div>
+                            <h3 class="time-subheading">People you invited</h3>
+                            <div id="family-children" class="time-family-list"><div class="time-empty">Sign in to manage family connections.</div></div>
+                            <h3 class="time-subheading">Invitations to you</h3>
+                            <div id="family-parents" class="time-family-list"><div class="time-empty">—</div></div>
+                        </article>
+                        <article class="time-card">
+                            <div class="time-section-head"><div><h2>App limits</h2><p>Limits apply to a connected child account</p></div></div>
+                            <label class="time-field-label" for="family-child-select">Choose a family member</label>
+                            <select id="family-child-select" class="time-select"><option value="">Select an approved connection</option></select>
+                            <form id="family-limit-form" class="time-limit-form">
+                                <label class="time-field-label" for="family-limit-app">Application name</label>
+                                <input id="family-limit-app" placeholder="e.g. game.exe" required>
+                                <label class="time-field-label" for="family-limit-minutes">Daily limit (minutes)</label>
+                                <input id="family-limit-minutes" type="number" min="1" max="1440" value="60">
+                                <label class="time-check"><input id="family-limit-blocked" type="checkbox"> Block this application</label>
+                                <button type="submit" class="time-button time-button-primary">Save limit</button>
+                            </form>
+                            <div id="family-limits-note" class="time-inline-message" hidden></div>
+                            <div id="family-limits" class="time-family-list"><div class="time-empty">Choose an approved connection to view limits.</div></div>
+                        </article>
                     </div>
-                    <span class="stat-menu">&#8942;</span>
-                </div>
-                <div class="stat-percent" id="card-disk-percent">--%</div>
-                <div class="stat-graph"><canvas id="sparkDisk"></canvas></div>
-                <div class="stat-updated" id="card-disk-updated">—</div>
-            </div>
+                    <article class="time-card time-child-monitor">
+                        <div class="time-section-head">
+                            <div><h2>Family member activity</h2><p>View the selected connected member’s synced app usage and device presence.</p></div>
+                            <button type="button" class="time-button" id="family-monitor-refresh">Refresh</button>
+                        </div>
+                        <div id="family-monitor-message" class="time-inline-message" role="status" hidden></div>
+                        <div id="family-monitor-status" class="time-device-list"><div class="time-empty">Select an approved family member to view activity.</div></div>
+                        <div class="time-cloud-grid">
+                            <section><h3>Apps used today</h3><div id="family-monitor-apps" class="time-app-list"><div class="time-empty">No member selected.</div></div></section>
+                            <section><h3>Recent activity</h3><div class="time-table-wrap"><table class="time-table"><thead><tr><th>Application</th><th>Window</th><th>Duration</th><th>Started</th></tr></thead><tbody id="family-monitor-recent"><tr><td colspan="4" class="time-empty">No member selected.</td></tr></tbody></table></div></section>
+                        </div>
+                    </article>
+                </section>
 
-            <div class="stat-card">
-                <div class="stat-card-head">
-                    <div>
-                        <div class="stat-title">Network</div>
-                        <div class="stat-subtitle" id="card-net-subtitle">—</div>
-                    </div>
-                    <span class="stat-menu">&#8942;</span>
-                </div>
-                <div class="stat-percent" id="card-net-percent">--%</div>
-                <div class="stat-graph"><canvas id="sparkNet"></canvas></div>
-                <div class="stat-updated" id="card-net-updated">—</div>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700;">System Performance</h3>
-            <div class="stat-subtitle" style="margin:-8px 0 14px 0;">Realtime Performance Overview</div>
-            <canvas id="historyChart"></canvas>
-            <div class="stat-updated" id="history-updated">—</div>
-        </div>
-
-        <!-- Recent Alerts: rolling log of threshold-crossing events this session -->
-        <div class="section-title">Recent Alerts</div>
-        <div class="panel">
-            <ul id="alerts-log" style="list-style:none; margin:0; padding:0; display:grid; gap:8px;">
-                <li style="color:#4a6584; font-size:13px;">No alerts yet this session.</li>
-            </ul>
-        </div>
-
-        <div class="panel">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                <div>
-                    <h3 style="font-size:15px; text-transform:none; letter-spacing:0; color:#eef4fb; font-weight:700; margin:0;">Top Processes</h3>
-                    <div class="stat-subtitle">Running Processes</div>
-                </div>
-            </div>
-            <table class="process-table">
-                <thead>
-                    <tr><th>PID</th><th>Name</th><th>CPU</th><th>Memory</th><th>Status</th></tr>
-                </thead>
-                <tbody id="process-body"><tr><td colspan="5" style="color:#4a6584;">Loading…</td></tr></tbody>
-            </table>
-        </div>
-
-        <div class="section-title">{{.T.timeline_recent_title}}</div>
-        <div class="panel">
-            <div id="activity-timeline" class="timeline">
-                <p style="color:#4a6584; font-size:13px;">Loading…</p>
-            </div>
-        </div>
-
-        <div class="grid cols-2">
-            <div class="panel">
-                <h3>Agent / Service Status</h3>
-                <div id="agent-status-body">
-                    <div class="agent-status-row"><span class="label">Loading…</span><span class="value"></span></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h3>Quick Actions</h3>
-                <div class="quick-actions-grid">
-                    <button type="button" class="quick-action-btn" onclick="location.reload()"><span class="qa-icon">🔄</span> Refresh Now</button>
-                    <button type="button" class="quick-action-btn" onclick="window.open('/export/csv','_blank')"><span class="qa-icon">📤</span> Export CSV</button>
-                    <button type="button" class="quick-action-btn" onclick="window.open('/report','_blank')"><span class="qa-icon">🖨️</span> Print Report</button>
-                    <button type="button" class="quick-action-btn" onclick="location.href='/settings'"><span class="qa-icon">⚙️</span> Settings</button>
-                    <button type="button" class="quick-action-btn" onclick="activateView('family'); history.pushState(null,'','/?view=family')"><span class="qa-icon">👪</span> Family</button>
-                    <button type="button" class="quick-action-btn" onclick="activateView('devices'); history.pushState(null,'','/?view=devices')"><span class="qa-icon">🖥️</span> Devices</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="section-title">{{.T.machine_config}}</div>
-        <div class="grid cols-2">
-            <div class="panel">
-                <h3>{{.T.system_info}}</h3>
-                <div id="machine-info-left"></div>
-            </div>
-            <div class="panel">
-                <h3>{{.T.storage_info}}</h3>
-                <div id="machine-info-disks"></div>
-            </div>
+                <footer class="time-footer"><span>JustInTime</span><span>Usage data shown here is sourced from your activity log.</span></footer>
+            </main>
         </div>
     </div>
-
-    <!-- ============ CPU ============ -->
-    <div id="view-cpu" class="dash-view" style="display:none;">
-        <div class="grid cols-2">
-            <div class="panel">
-                <h3>CPU Load</h3>
-                <div class="radial-gauge-wrap">
-                    <canvas id="gaugeCpuTab" width="200" height="110"></canvas>
-                    <div class="radial-gauge-value" id="cpu-value-tab">--%</div>
-                </div>
-            </div>
-            <div class="panel">
-                <h3>Processor Info</h3>
-                <div id="cpu-info"></div>
-            </div>
-        </div>
-
-        <div class="section-title">Per-Core Load</div>
-        <div class="panel">
-            <div id="cpu-cores-grid" class="cores-grid"></div>
-        </div>
-
-        <div class="section-title">CPU History</div>
-        <div class="panel">
-            <canvas id="cpuHistoryChart"></canvas>
-        </div>
-    </div>
-
-    <!-- ============ RAM ============ -->
-    <div id="view-ram" class="dash-view" style="display:none;">
-        <div class="grid cols-2">
-            <div class="panel">
-                <h3>Memory Load</h3>
-                <div class="radial-gauge-wrap">
-                    <canvas id="gaugeRamTab" width="200" height="110"></canvas>
-                    <div class="radial-gauge-value" id="ram-value-tab">--%</div>
-                </div>
-            </div>
-            <div class="panel">
-                <h3>Memory Breakdown</h3>
-                <div id="ram-info"></div>
-            </div>
-        </div>
-
-        <div class="section-title">RAM &amp; Swap History</div>
-        <div class="panel">
-            <canvas id="ramHistoryChart"></canvas>
-        </div>
-    </div>
-
-    <!-- ============ DISK ============ -->
-    <div id="view-disk" class="dash-view" style="display:none;">
-        <div class="section-title">Partitions</div>
-        <div class="panel">
-            <div id="disk-partitions"></div>
-        </div>
-
-        <div class="section-title">Disk I/O Throughput</div>
-        <div class="panel">
-            <canvas id="diskIoChart"></canvas>
-        </div>
-    </div>
-
-    <!-- ============ NETWORK ============ -->
-    <div id="view-network" class="dash-view" style="display:none;">
-        <div class="section-title">Interfaces</div>
-        <div class="panel">
-            <table>
-                <thead><tr><th>Interface</th><th>IPv4</th><th>Status</th><th>Link Speed</th></tr></thead>
-                <tbody id="network-interfaces-body"></tbody>
-            </table>
-        </div>
-
-        <div class="section-title">Throughput</div>
-        <div class="grid cols-2">
-            <div class="panel">
-                <h3>Live Speed</h3>
-                <div class="metric-value" style="font-size:18px;">
-                    &#8595; <span id="net-down-tab">--</span><br>
-                    &#8593; <span id="net-up-tab">--</span>
-                </div>
-            </div>
-            <div class="panel">
-                <h3>History</h3>
-                <canvas id="netHistoryChart"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============ LOCAL ACTIVITY (new: works fully offline) ============ -->
-    <div id="view-local" class="dash-view" style="display:none;">
-        <div class="section-title">{{.T.local_title}}</div>
-        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.local_note}}</p>
-
-        <div id="local-error"></div>
-
-        <div class="section-title">{{.T.local_time_today}}</div>
-        <div class="panel">
-            <canvas id="localChart"></canvas>
-        </div>
-
-        <div class="section-title">{{.T.local_recent}}</div>
-        <div class="panel">
-            <table>
-                <thead>
-                    <tr><th>{{.T.process}}</th><th>{{.T.window_title}}</th><th>{{.T.duration}}</th><th>{{.T.when}}</th></tr>
-                </thead>
-                <tbody id="local-recent-body"></tbody>
-            </table>
-        </div>
-
-        <div class="section-title">
-            {{.T.ai_insights_title}}
-            <span><button type="button" class="btn btn-outline" id="btn-generate-insights">{{.T.ai_insights_generate}}</button></span>
-        </div>
-        <div class="panel">
-            <div class="tabs" style="margin-bottom:16px;">
-                <button data-insights-source="local" class="active insights-source-btn">{{.T.ai_insights_source_local}}</button>
-                <button data-insights-source="cloud" class="insights-source-btn">{{.T.ai_insights_source_cloud}}</button>
-            </div>
-            <div id="insights-error"></div>
-            <div id="insights-loading" style="display:none; color:#7e9ac0; font-size:13px;">{{.T.ai_insights_generating}}</div>
-            <div id="insights-result" style="display:none;">
-                <h4 style="margin:0 0 6px 0; color:#5aa9ff; font-size:13px; text-transform:uppercase; letter-spacing:1px;">{{.T.ai_insights_summary}}</h4>
-                <p id="insights-summary" style="margin:0 0 18px 0;"></p>
-
-                <h4 style="margin:0 0 6px 0; color:#5aa9ff; font-size:13px; text-transform:uppercase; letter-spacing:1px;">{{.T.ai_insights_apps}}</h4>
-                <table style="margin-bottom:18px;">
-                    <thead><tr><th>{{.T.process}}</th><th>Category</th><th>Note</th></tr></thead>
-                    <tbody id="insights-apps-body"></tbody>
-                </table>
-
-                <h4 style="margin:0 0 6px 0; color:#5aa9ff; font-size:13px; text-transform:uppercase; letter-spacing:1px;">{{.T.ai_insights_recommendations}}</h4>
-                <ul id="insights-recommendations" style="margin:0; padding-left:20px;"></ul>
-            </div>
-        </div>
-
-        <!-- AI Chatbot: hỏi đáp tự do về dữ liệu dùng máy của chính
-             mình (dùng chung API key Gemini với AI Insights ở trên) -->
-        <div class="section-title">{{.T.chat_title}}</div>
-        <div class="panel" style="margin-bottom:20px;">
-            <p style="color:#7e9ac0; font-size:12px; margin-top:0;">{{.T.chat_note}}</p>
-            <div id="chat-messages" class="chat-messages"></div>
-            <div id="chat-error"></div>
-            <form id="chat-form" style="display:flex; gap:8px; margin-top:10px;">
-                <input id="chat-input" type="text" autocomplete="off" placeholder="{{.T.chat_placeholder}}"
-                       style="flex:1; background:#000; border:1px solid #1c3a5e; color:#dce8f7; padding:8px 12px; border-radius:8px; font-family:inherit;">
-                <button type="submit" class="btn" id="chat-send-btn">{{.T.chat_send}}</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- ============ CLOUD ============ -->
-    <div id="view-cloud" class="dash-view" style="display:none;">
-
-        <div class="tabs">
-            <button data-range="today" class="active range-btn">{{.T.today}}</button>
-            <button data-range="week" class="range-btn">{{.T.week}}</button>
-            <button data-range="month" class="range-btn">{{.T.month}}</button>
-        </div>
-
-        <div id="cloud-error"></div>
-
-        <div class="section-title">
-            {{.T.time_by_app}}
-            <span>
-                <a class="btn btn-outline" id="btn-export-csv" href="#">{{.T.export_csv}}</a>
-                <a class="btn btn-outline" id="btn-print-report" href="#" target="_blank">{{.T.export_report}}</a>
-            </span>
-        </div>
-        <div class="panel">
-            <canvas id="cloudChart"></canvas>
-        </div>
-
-        <div class="section-title">{{.T.daily_totals}}</div>
-        <div class="panel">
-            <canvas id="dailyBarChart"></canvas>
-        </div>
-
-        <div class="section-title">{{.T.recent_activity}}</div>
-        <div class="panel">
-            <table>
-                <thead>
-                    <tr>
-                        <th>{{.T.device}}</th>
-                        <th>{{.T.process}}</th>
-                        <th>{{.T.window_title}}</th>
-                        <th>{{.T.duration}}</th>
-                        <th>{{.T.when}}</th>
-                    </tr>
-                </thead>
-                <tbody id="cloud-recent-body"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- ============ DEVICES (new: cross-device messaging by device_id) ============ -->
-    <div id="view-devices" class="dash-view" style="display:none;">
-        <div class="section-title">{{.T.devices_title}}</div>
-        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.devices_note}}</p>
-
-        <div id="devices-error"></div>
-
-        <div class="panel" style="margin-bottom:20px;">
-            <div id="devices-chips" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
-        </div>
-
-        <div id="device-thread-panel" class="panel" style="display:none; margin-bottom:20px;">
-            <div class="section-title" style="margin-top:0;">
-                <span id="device-thread-title"></span>
-                <span><button type="button" class="btn btn-outline" id="btn-request-stats">{{.T.devices_request_stats}}</button></span>
-            </div>
-            <div id="device-thread-messages" class="chat-messages"></div>
-            <form id="device-thread-form" style="display:flex; gap:8px; margin-top:10px;">
-                <input id="device-thread-input" type="text" autocomplete="off" placeholder="{{.T.devices_payload}}"
-                       style="flex:1; background:#000; border:1px solid #1c3a5e; color:#dce8f7; padding:8px 12px; border-radius:8px; font-family:inherit;">
-                <button type="submit" class="btn">{{.T.devices_send}}</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- ============ FAMILY (new: consent-based parent/child linking + limits) ============ -->
-    <div id="view-family" class="dash-view" style="display:none;">
-
-        <div class="section-title">{{.T.family_invite_title}}</div>
-        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.family_invite_note}}</p>
-        <div id="family-invite-error"></div>
-        <div class="panel" style="margin-bottom:20px;">
-            <form id="invite-form" style="display:flex; gap:8px; flex-wrap:wrap;">
-                <input id="invite-email" type="email" placeholder="{{.T.family_invite_email}}" style="flex:1;min-width:220px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
-                <button type="submit" class="btn">{{.T.family_invite_send}}</button>
-            </form>
-        </div>
-
-        <div class="section-title">{{.T.family_children_title}}</div>
-        <div id="family-children-error"></div>
-        <div class="panel" style="margin-bottom:20px;">
-            <table>
-                <thead><tr><th>Email</th><th>{{.T.family_permission_col}}</th><th></th><th></th></tr></thead>
-                <tbody id="family-children-body"></tbody>
-            </table>
-        </div>
-
-        <div class="section-title">{{.T.family_limits_title}}</div>
-        <div class="panel" style="margin-bottom:20px;">
-            <p id="family-limits-hint" style="color:#7e9ac0; font-size:13px; margin-top:0;">{{.T.family_limits_select}}</p>
-
-            <table style="margin-bottom:16px;">
-                <thead><tr><th>{{.T.family_limit_process}}</th><th>{{.T.today}}</th><th></th></tr></thead>
-                <tbody id="family-limits-body"></tbody>
-            </table>
-
-            <form id="limit-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                <input id="limit-process" type="text" placeholder="{{.T.family_limit_process}}" style="flex:1;min-width:180px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
-                <input id="limit-minutes" type="number" min="1" value="60" placeholder="{{.T.family_limit_minutes}}" style="width:110px;background:#000;border:1px solid #1c3a5e;color:#dce8f7;padding:8px 12px;border-radius:8px;font-family:inherit;">
-                <label style="font-size:13px; color:#dce8f7;"><input id="limit-nolimit" type="checkbox"> {{.T.family_limit_nolimit}}</label>
-                <label style="font-size:13px; color:#dce8f7;"><input id="limit-block" type="checkbox"> {{.T.family_limit_block}}</label>
-                <button type="submit" class="btn">{{.T.family_limit_save}}</button>
-            </form>
-        </div>
-
-        <div class="section-title">{{.T.family_today_usage}}</div>
-        <div class="panel" style="margin-bottom:20px;">
-            <canvas id="familyChart"></canvas>
-        </div>
-
-        <div class="section-title">{{.T.family_recent}}</div>
-        <div class="panel" style="margin-bottom:20px;">
-            <table>
-                <thead><tr><th>{{.T.process}}</th><th>{{.T.window_title}}</th><th>{{.T.duration}}</th><th>{{.T.when}}</th></tr></thead>
-                <tbody id="family-recent-body"></tbody>
-            </table>
-        </div>
-
-        <div class="section-title">{{.T.family_parents_title}}</div>
-        <p style="color:#7e9ac0; font-size:13px; margin-top:-8px;">{{.T.family_parents_note}}</p>
-        <div id="family-parents-error"></div>
-        <div class="panel">
-            <table>
-                <thead><tr><th>Email</th><th></th><th></th></tr></thead>
-                <tbody id="family-parents-body"></tbody>
-            </table>
-        </div>
-    </div>
-
-            </div>
-        </div>
-    </div>
-
-    <div class="toast-container" id="toast-container"></div>
-
-    <script>
-        const THRESHOLDS = {
-            cpu: {{.DS.CPUThreshold}},
-            ram: {{.DS.RAMThreshold}},
-            disk: {{.DS.DiskThreshold}}
-        };
-
-        const DEVICE_ID = {{json .DeviceID}};
-        const DEVICE_LABEL = {{json .DeviceLabel}};
-        const TIME_FORMAT = {{json .DS.TimeFormat}};
-        const DEFAULT_PERIOD = {{json .DS.DefaultPeriod}};
-
-        const LABELS = {
-            cpuHigh: {{json .T.alert_cpu_high}},
-            ramHigh: {{json .T.alert_ram_high}},
-            diskHigh: {{json .T.alert_disk_high}},
-            loginRequired: {{json .T.login_required}},
-            login: {{json .T.login}},
-            noDevices: {{json .T.devices_none}},
-            noMessages: {{json .T.devices_inbox_empty}},
-            devicesRequestedStats: {{json .T.devices_requested_stats}},
-            devicesTheyRequestedStats: {{json .T.devices_they_requested_stats}},
-            devicesShareStats: {{json .T.devices_share_stats}},
-            machineGenericName: {{json .T.machine_generic_name}},
-            machineLegacyName: {{json .T.machine_legacy_name}},
-            machineLegacyBadge: {{json .T.machine_legacy_badge}},
-            machineLegacyTooltip: {{json .T.machine_legacy_tooltip}},
-            machineHiddenId: {{json .T.machine_hidden_id}},
-            machineRemoveBtn: {{json .T.machine_remove_btn}},
-            machineRemoveConfirm: {{json .T.machine_remove_confirm}},
-            familyNoChildren: {{json .T.family_children_none}},
-            familyNoParents: {{json .T.family_parents_none}},
-            familyNoLimits: {{json .T.family_limits_none}},
-            familySelectChild: {{json .T.family_limits_select}},
-            familyStatusPending: {{json .T.family_status_pending}},
-            familyStatusApproved: {{json .T.family_status_approved}},
-            familyStatusRevoked: {{json .T.family_status_revoked}},
-            familyApprove: {{json .T.family_approve}},
-            familyRevoke: {{json .T.family_revoke}},
-            familyPermFull: {{json .T.family_perm_full}},
-            familyPermViewOnly: {{json .T.family_perm_view_only}},
-            familyViewOnlyNotice: {{json .T.family_view_only_notice}},
-            familyDeleteLimit: {{json .T.family_limit_delete}},
-            familyNoLimitText: {{json .T.family_limit_nolimit}}
-        };
-    </script>
-    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/time-dashboard.js"></script>
 </body>
 </html>
 {{end}}

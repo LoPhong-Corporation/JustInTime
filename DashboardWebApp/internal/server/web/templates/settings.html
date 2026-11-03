@@ -3,81 +3,72 @@
 <html lang="{{.DS.Language}}">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{.T.app_title}}</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
         :root { --app-font: {{css .FontStack}}; }
     </style>
 </head>
-<body>
+<body class="app-page">
 
     <div class="app-shell">
+        <header class="topbar window-titlebar no-print">
+            <div class="window-identity">
+                <span class="window-mark" aria-hidden="true"></span>
+                <h1>{{.T.app_title}}</h1>
+            </div>
+            <div class="user-info">
+                {{if .LoggedIn}}
+                    <span class="user-email">{{.CurrentEmail}}</span>
+                    <a class="logout" href="/logout">{{.T.logout}}</a>
+                {{else}}
+                    <span class="offline-label">{{.T.mode_offline}}</span>
+                    <a class="logout" href="/login">{{.T.login}}</a>
+                {{end}}
+            </div>
+        </header>
 
-        <div class="sidebar no-print">
+        <div class="app-body">
+        <aside class="sidebar no-print" aria-label="Main navigation">
             <div class="brand"><span class="dot"></span>JustInTime</div>
             <nav>
                 <a href="/?view=overview" class="nav-link">
                     <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-                    {{.T.nav_system}}
+                    <span>Overview</span>
                 </a>
-                <a href="/?view=cpu" class="nav-link">
-                    <svg class="icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>
-                    CPU
-                </a>
-                <a href="/?view=ram" class="nav-link">
-                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M7 7v10M11 7v10M15 7v10"/></svg>
-                    Memory
-                </a>
-                <a href="/?view=disk" class="nav-link">
-                    <svg class="icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
-                    Disk
-                </a>
-                <a href="/?view=network" class="nav-link">
-                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v5M12 12.5 6.7 17M12 12.5l5.3 4.5"/></svg>
-                    Network
-                </a>
-                <a href="/?view=local" class="nav-link">
+                <a href="/?view=apps" class="nav-link">
                     <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h4"/></svg>
-                    {{.T.nav_local}}
+                    <span>Applications</span>
                 </a>
-                <a href="/?view=cloud" class="nav-link">
+                <a href="/?view=history" class="nav-link">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 7 9.1 4 4 0 0 0 7 18z"/></svg>
-                    {{.T.nav_cloud}}
+                    <span>History</span>
+                </a>
+                <a href="/?view=limits" class="nav-link">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M6 3h12M6 21h12M8 3c0 5 4 6 4 9s-4 4-4 9M16 3c0 5-4 6-4 9s4 4 4 9"/></svg>
+                    <span>App limits</span>
                 </a>
                 <a href="/?view=devices" class="nav-link">
                     <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 18h6"/><rect x="18" y="8" width="4" height="8" rx="1"/></svg>
-                    {{.T.nav_devices}}
+                    <span>{{.T.nav_devices}}</span>
                 </a>
                 <a href="/?view=family" class="nav-link">
                     <svg class="icon" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21v-1a6 6 0 0 1 12 0v1"/><path d="M14.5 21v-.7a5 5 0 0 1 7.5-4.3"/></svg>
-                    {{.T.nav_family}}
+                    <span>{{.T.nav_family}}</span>
                 </a>
                 <a href="/settings" class="nav-link active settings-link">
                     <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c.16.5.62.86 1.15 1H21a2 2 0 1 1 0 4h-.09c-.53.14-.99.5-1.15 1z"/></svg>
-                    {{.T.nav_settings}}
+                    <span>{{.T.nav_settings}}</span>
                 </a>
             </nav>
-        </div>
+        </aside>
 
-        <div class="main-area">
-            <div class="topbar no-print">
-                <h1>{{.T.app_title}}</h1>
-                <div class="user-info">
-                    {{if .LoggedIn}}
-                        <span>{{.CurrentEmail}}</span>
-                        <a class="logout" href="/logout">{{.T.logout}}</a>
-                    {{else}}
-                        <span style="color:#f5a524;">{{.T.mode_offline}}</span>
-                        <a class="logout" style="color:#5aa9ff;border-color:#2f7de1;" href="/login">{{.T.login}}</a>
-                    {{end}}
-                </div>
-            </div>
-
+        <main class="main-area">
             <div class="container">
-
-    <h2 style="font-size:16px; text-transform:uppercase; letter-spacing:1.5px; color:#5aa9ff; margin-bottom:20px;">
-        {{.T.settings_title}}
-    </h2>
+                <header class="page-heading">
+                    <h2>{{.T.settings_title}}</h2>
+                </header>
 
     {{if .Extra.message}}
     <div class="success-banner">{{.Extra.message}}</div>
@@ -111,7 +102,7 @@
                 <option value="12h" {{if eq .DS.TimeFormat "12h"}}selected{{end}}>{{.T.time_format_12h}}</option>
             </select>
 
-            <label>{{.T.default_period}}</label>
+            <label>Default history period</label>
             <select name="default_period">
                 <option value="today" {{if eq .DS.DefaultPeriod "today"}}selected{{end}}>{{.T.period_today}}</option>
                 <option value="yesterday" {{if eq .DS.DefaultPeriod "yesterday"}}selected{{end}}>{{.T.period_yesterday}}</option>
@@ -119,14 +110,8 @@
                 <option value="last_week" {{if eq .DS.DefaultPeriod "last_week"}}selected{{end}}>{{.T.period_last_week}}</option>
             </select>
 
-            <label>{{.T.cpu_threshold}}</label>
-            <input type="number" name="cpu_threshold" min="1" max="100" value="{{.DS.CPUThreshold}}">
-
-            <label>{{.T.ram_threshold}}</label>
-            <input type="number" name="ram_threshold" min="1" max="100" value="{{.DS.RAMThreshold}}">
-
-            <label>{{.T.disk_threshold}}</label>
-            <input type="number" name="disk_threshold" min="1" max="100" value="{{.DS.DiskThreshold}}">
+            <label id="screen-time-goal">Daily screen-time goal (minutes)</label>
+            <input type="number" name="daily_goal_min" min="30" max="1440" step="15" value="{{.DS.DailyGoalMin}}" required>
 
             <button type="submit" class="btn">{{.T.save}}</button>
         </form>
@@ -213,6 +198,7 @@
     </div>
 
             </div>
+        </main>
         </div>
     </div>
 

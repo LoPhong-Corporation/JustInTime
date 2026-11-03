@@ -1,29 +1,42 @@
 # JustInTime Dashboard (Go rewrite)
 
 This is a Go rewrite of the previous Flask dashboard (`dashboard/app.pyw`
-and friends). It keeps the same look, the same routes/JSON shapes (so
-`static/js/dashboard.js`'s Chart.js wiring works with only additive
-changes), the same `%APPDATA%\JustInTime\dashboard_settings.json` file
-(your font/language/threshold prefs carry over automatically), and the
-same Supabase project — and adds four things the Python version didn't
-have:
+and friends). The web interface is a local-first screen-time dashboard
+for reviewing application usage and history, with account-backed device
+and family controls. It keeps the existing routes/JSON shapes, the same
+`%APPDATA%\JustInTime\dashboard_settings.json` file (your preferences
+carry over automatically), and the same Supabase project.
+The Go version also adds:
 
-1. **A local, fully-offline view.** A new "Local Activity" tab reads
-   `justintime.db` (the same SQLite file the C agent writes) directly,
-   with no network and no login required. Every other route in the old
-   dashboard required login for even system stats; this rewrite only
-   requires login for the Cloud/Devices tabs.
-2. **A tray icon** with an "Open Dashboard" button, plus a "Launch at
+1. **Local, fully-offline screen-time tracking.** The Overview,
+   Applications, and History pages read `justintime.db` (the same
+   SQLite file the C agent writes) directly, with no network or login
+   required. Signing in is only needed for synced devices and family
+   features. The dashboard includes a configurable daily goal, a local
+   focus timer, hourly and estimated app-category summaries, per-app
+   session/window details, date-range history, and local CSV export/print.
+2. **Synced activity and reports.** Review app totals, daily usage, and
+   recent activity uploaded from the account's devices. Cloud CSV exports
+   and printable reports are range-filtered (today, 7 days, or 30 days).
+3. **Family activity and application limits.** Review a connected family
+   member's synced app usage, recent activity, and device presence. App
+   limits can be managed for approved connections, respecting view-only
+   permissions.
+4. **A tray icon** with an "Open Dashboard" button, plus a "Launch at
    login" toggle that registers the dashboard to start automatically
    every time you log into Windows (via the registry Run key, the same
    mechanism `settings.c` uses for the agent itself, but a separate
    entry so the two never interfere).
-3. **Device-to-device messaging by `device_id`.** A new "Devices" tab
-   lets you send a short message or a "data" payload (e.g. today's
-   summary) to another of your own machines. Like activity sync, this
-   is always relayed through Supabase — the dashboard never opens a
-   direct connection to another computer.
-4. A single static binary: no `pip install`, no Python runtime on the
+5. **Device-to-device messaging by `device_id`.** The "Devices" page
+   lets you send a short message to another of your own machines and
+   review messages received by this device. Like activity sync, this is
+   always relayed through Supabase — the dashboard never opens a direct
+   connection to another computer.
+6. **On-demand AI insights and usage chat.** With the user's own Gemini
+   API key configured in Settings, the dashboard can summarize local or
+   synced app-usage data and answer questions about local activity. These
+   requests run only after an explicit user action.
+7. A single static binary: no `pip install`, no Python runtime on the
    target machine. Templates, CSS and JS are embedded in the `.exe`.
 
 ## Project layout
@@ -66,6 +79,8 @@ go run ./cmd/dashboard
 ```
 
 Then open http://127.0.0.1:5000 (same port the Python version used).
+The local API also allows CORS only from the Tauri app origin and the
+localhost Vite development ports used by `JITDashboard`.
 
 ## Setting up device messaging
 
@@ -90,16 +105,10 @@ read/write messages tied to their own account — the same protection
   gopsutil has no portable API for it (psutil's `net_if_stats().speed`
   relies on OS-specific calls). The UI already falls back to "N/A" for
   a falsy value, so this degrades gracefully.
-- **Chart.js** is still loaded from a CDN (`cdn.jsdelivr.net`), same as
-  the Python version — so the *charts* on the Overview/CPU/RAM/Disk/
-  Network tabs need internet the first time (browsers cache it after).
-  The new **Local Activity** and **system stats** data themselves don't
-  need internet; only that one script tag does. If you want the whole
-  dashboard byte-for-byte offline-capable, vendor `chart.js` into
-  `internal/server/web/static/` and swap the `<script src=...>` tag in
-  `templates/index.html` for a local path.
-- The dashboard's own login (Cloud/Devices tabs) is separate from the
-  C agent's login, exactly like the Python version — it's not the
+- The screen-time dashboard renders its usage charts with local HTML and
+  CSS; it does not load a charting library or other third-party scripts.
+- The dashboard's own login (Devices and Family features) is separate
+  from the C agent's login, exactly like the Python version — it's not the
   agent's DPAPI `session.dat`, it's its own persisted session at
   `dashboard_session.dat`.
 
@@ -134,4 +143,3 @@ Microsoft" buttons on `/login` work immediately — no code changes
 needed. See `handleOAuthStart` / `handleOAuthCallback` /
 `handleOAuthComplete` in `internal/server/server.go` for how the
 redirect + token handoff works.
-

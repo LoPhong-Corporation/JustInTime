@@ -154,7 +154,55 @@ func (s *Server) heartbeatLoop() {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	dashboardPort := 0
+	if s.cfg != nil {
+		dashboardPort = s.cfg.Port
+	}
+	if origin != "" && !isAllowedDashboardOrigin(origin, dashboardPort) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
+	if origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Max-Age", "600")
+		w.Header().Add("Vary", "Origin")
+	}
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	s.mux.ServeHTTP(w, r)
+}
+
+func isAllowedDashboardOrigin(origin string, dashboardPort int) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+
+	switch parsed.Scheme {
+	case "tauri":
+		return parsed.Host == "localhost"
+	case "http", "https":
+		host := strings.ToLower(parsed.Hostname())
+		if host == "tauri.localhost" && parsed.Port() == "" {
+			return true
+		}
+		if host != "localhost" && host != "127.0.0.1" {
+			return false
+		}
+		switch parsed.Port() {
+		case "1420", "5173", "5174":
+			return parsed.Scheme == "http"
+		default:
+			return parsed.Scheme == "http" && dashboardPort > 0 && parsed.Port() == strconv.Itoa(dashboardPort)
+		}
+	default:
+		return false
+	}
 }
 
 func (s *Server) routes() {
@@ -173,6 +221,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/settings", s.handleSettingsPage)
 	s.mux.HandleFunc("/report", s.handleReportPage)
 	s.mux.HandleFunc("/export/csv", s.handleExportCSV)
+	s.mux.HandleFunc("/export/local.csv", s.handleLocalExportCSV)
 
 	s.mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 	s.mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
@@ -192,6 +241,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/local/recent", s.handleLocalRecent)
 	s.mux.HandleFunc("/api/local/timeline", s.handleTimeline)
 	s.mux.HandleFunc("/api/local/period", s.handleLocalPeriod)
+	s.mux.HandleFunc("/api/local/app", s.handleLocalApp)
 	s.mux.HandleFunc("/api/local/chat", s.handleChat)
 	s.mux.HandleFunc("/api/local/insights", s.handleInsights)
 	s.mux.HandleFunc("/api/machines", s.handleMachines)
@@ -892,6 +942,24 @@ func (s *Server) handleLocalRecent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"mode": "local", "recent": recent})
+}
+
+func (s *Server) handleLocalApp(w http.ResponseWriter, r *http.Request) {
+	processName := strings.TrimSpace(r.URL.Query().Get("process_name"))
+	if processName == "" {
+		writeErr(w, http.StatusBadRequest, "process_name is required")
+		return
+	}
+
+	now := time.Now()
+	loc := now.Location()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	details, err := s.db.AppDetails(processName, todayStart.Unix(), todayStart.AddDate(0, 0, 1).Unix())
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, details)
 }
 
 // timelineColors is a small fixed palette cycled deterministically per
@@ -1791,6 +1859,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "appearance":
 		ds := dashsettings.Load()
+		validationError := ""
 		if v := r.FormValue("font"); v != "" {
 			ds.Font = v
 		}
@@ -1803,6 +1872,11 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		if v := r.FormValue("default_period"); v == "today" || v == "yesterday" || v == "this_week" || v == "last_week" {
 			ds.DefaultPeriod = v
 		}
+		if v, err := strconv.Atoi(r.FormValue("daily_goal_min")); err == nil && v >= 30 && v <= 1440 {
+			ds.DailyGoalMin = v
+		} else if r.FormValue("daily_goal_min") != "" {
+			validationError = "Daily screen-time goal must be between 30 and 1440 minutes."
+		}
 		if v, err := strconv.Atoi(r.FormValue("cpu_threshold")); err == nil {
 			ds.CPUThreshold = v
 		}
@@ -1812,9 +1886,16 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		if v, err := strconv.Atoi(r.FormValue("disk_threshold")); err == nil {
 			ds.DiskThreshold = v
 		}
-		_ = dashsettings.Save(ds)
+		if err := dashsettings.Save(ds); err != nil {
+			data.Extra["error"] = "Could not save settings: " + err.Error()
+			break
+		}
 		data = s.basePageData("settings")
-		data.Extra["message"] = data.T["save_success"]
+		if validationError != "" {
+			data.Extra["error"] = validationError
+		} else {
+			data.Extra["message"] = data.T["save_success"]
+		}
 
 	case "password":
 		newPass := r.FormValue("new_password")
@@ -1906,26 +1987,109 @@ func (s *Server) handleReportPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleExportCSV(w http.ResponseWriter, r *http.Request) {
+	rangeParam := r.URL.Query().Get("range")
+	if rangeParam == "" {
+		rangeParam = "week"
+	}
+	if rangeParam != "today" && rangeParam != "week" && rangeParam != "month" {
+		writeErr(w, http.StatusBadRequest, "range must be today, week, or month")
+		return
+	}
+	fromDate, toDate := dayRangeFor(rangeParam)
+	loc := time.Now().Location()
+	start, err := time.ParseInLocation("2006-01-02", fromDate, loc)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid export range")
+		return
+	}
+	end, err := time.ParseInLocation("2006-01-02", toDate, loc)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid export range")
+		return
+	}
+	startUnix, endUnix := start.Unix(), end.AddDate(0, 0, 1).Unix()
+
 	logs, err := withAuthRetry(s, r.Context(), func(c *cloud.Client) ([]cloud.RecentLog, error) {
 		return c.RecentLogs(r.Context(), 1000)
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		s.writeCloudErr(w, err)
 		return
 	}
 
+	filtered := logs[:0]
+	for _, entry := range logs {
+		if entry.StartTime >= startUnix && entry.StartTime < endUnix {
+			filtered = append(filtered, entry)
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="justintime_export.csv"`)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="justintime_%s_export.csv"`, rangeParam))
 
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"device_id", "process_name", "window_title", "duration_seconds", "start_time", "end_time"})
-	for _, l := range logs {
+	for _, l := range filtered {
 		_ = cw.Write([]string{
-			l.DeviceID, l.ProcessName, l.WindowTitle,
+			csvSafeCell(l.DeviceID), csvSafeCell(l.ProcessName), csvSafeCell(l.WindowTitle),
 			fmt.Sprintf("%d", l.Duration),
 			time.Unix(l.StartTime, 0).Format(time.RFC3339),
 			time.Unix(l.EndTime, 0).Format(time.RFC3339),
 		})
 	}
 	cw.Flush()
+	if err := cw.Error(); err != nil {
+		log.Printf("dashboard: CSV export failed: %v", err)
+	}
+}
+
+func csvSafeCell(value string) string {
+	trimmed := strings.TrimLeft(value, " \t\r\n")
+	if trimmed != "" && strings.ContainsRune("=+-@", rune(trimmed[0])) {
+		return "'" + value
+	}
+	return value
+}
+
+func (s *Server) handleLocalExportCSV(w http.ResponseWriter, r *http.Request) {
+	start, end, _, _, err := resolvePeriod(
+		r.URL.Query().Get("period"),
+		r.URL.Query().Get("from"),
+		r.URL.Query().Get("to"),
+	)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	activities, err := s.db.ActivitiesInRange(start.Unix(), end.Unix(), 10000)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="justintime_local_export.csv"`)
+	writer := csv.NewWriter(w)
+	if err := writer.Write([]string{"process_name", "window_title", "duration_seconds", "start_time", "end_time", "synced"}); err != nil {
+		log.Printf("dashboard: local CSV export failed: %v", err)
+		return
+	}
+	for _, activity := range activities {
+		if err := writer.Write([]string{
+			csvSafeCell(activity.ProcessName),
+			csvSafeCell(activity.WindowTitle),
+			fmt.Sprintf("%d", activity.Duration),
+			time.Unix(activity.StartTime, 0).Format(time.RFC3339),
+			time.Unix(activity.EndTime, 0).Format(time.RFC3339),
+			strconv.FormatBool(activity.Synced),
+		}); err != nil {
+			log.Printf("dashboard: local CSV export failed: %v", err)
+			return
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		log.Printf("dashboard: local CSV export failed: %v", err)
+	}
 }
