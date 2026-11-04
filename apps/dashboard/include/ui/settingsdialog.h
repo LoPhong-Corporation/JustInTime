@@ -23,10 +23,9 @@ namespace jit::dash::ui {
 class SettingsDialog : public QDialog
 {
 public:
-    // isLoggedIn: ẩn/hiện tab Password + nút "logout everywhere" (cần đăng
-    // nhập). onLoggedOut: gọi khi người dùng bấm đăng xuất thành công - để
-    // MainWindow cập nhật lại session của chính nó.
-    SettingsDialog(bool isLoggedIn, std::function<void()> onLoggedOut, QWidget* parent = nullptr);
+    // onSettingsSaved/onLoggedOut notify MainWindow after persistent changes.
+    SettingsDialog(bool isLoggedIn, std::function<void()> onLoggedOut,
+                   std::function<void()> onSettingsSaved, QWidget* parent = nullptr);
 
 private:
     QComboBox* fontBox_;
@@ -44,6 +43,7 @@ private:
 
     QLabel* accountMsg_;
     std::function<void()> onLoggedOut_;
+    std::function<void()> onSettingsSaved_;
 
     void loadInto(const DashSettings& s);
     void saveAppearance();

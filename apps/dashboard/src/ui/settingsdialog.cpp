@@ -32,8 +32,11 @@ void showMsg(QLabel* l, const QString& text, bool isError)
 }
 } // namespace
 
-SettingsDialog::SettingsDialog(bool isLoggedIn, std::function<void()> onLoggedOut, QWidget* parent)
-    : QDialog(parent), onLoggedOut_(std::move(onLoggedOut))
+SettingsDialog::SettingsDialog(bool isLoggedIn, std::function<void()> onLoggedOut,
+                               std::function<void()> onSettingsSaved, QWidget* parent)
+    : QDialog(parent),
+      onLoggedOut_(std::move(onLoggedOut)),
+      onSettingsSaved_(std::move(onSettingsSaved))
 {
     setWindowTitle("Settings");
     setMinimumWidth(420);
@@ -148,7 +151,11 @@ void SettingsDialog::saveAppearance()
     s.diskThreshold = diskThreshold_->value();
 
     if (saveDashSettings(s))
+    {
         showMsg(appearanceMsg_, "Saved. Some changes take effect after reopening this window.", false);
+        if (onSettingsSaved_)
+            onSettingsSaved_();
+    }
     else
         showMsg(appearanceMsg_, "Failed to save settings.", true);
 }

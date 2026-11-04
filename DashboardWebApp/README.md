@@ -55,7 +55,7 @@ DashboardWebApp/
     server/         HTTP routes + embedded templates/static (web/)
     tray/           system tray icon (Windows-only)
     autostart/      registry Run-key toggle (Windows-only)
-  migrations/002_device_messages.sql   run once in the Supabase SQL editor
+  ../migrations/002_device_messages.sql   run once in the Supabase SQL editor
 ```
 
 ## Building
@@ -90,7 +90,7 @@ dashboard directly (without `--headless`) to use its embedded web UI.
 
 ## Setting up device messaging
 
-Run `migrations/002_device_messages.sql` once in your Supabase
+Run `../migrations/002_device_messages.sql` once in your Supabase
 project's SQL editor (Dashboard > SQL Editor). It adds a
 `device_messages` table with Row Level Security so a user can only ever
 read/write messages tied to their own account — the same protection

@@ -49,6 +49,16 @@ RightPanel::RightPanel(Collector* collector, QWidget* parent) : QWidget(parent),
     processTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     processTable_->setSelectionMode(QAbstractItemView::NoSelection);
     layout->addWidget(processTable_, 1);
+
+    reloadThresholds();
+}
+
+void RightPanel::reloadThresholds()
+{
+    const DashSettings settings = loadDashSettings();
+    cpuThreshold_ = settings.cpuThreshold;
+    ramThreshold_ = settings.ramThreshold;
+    diskThreshold_ = settings.diskThreshold;
 }
 
 void RightPanel::refreshStaticInfoOnce()
@@ -85,8 +95,11 @@ void RightPanel::tick()
         .arg(machineInfoLine_.isEmpty() ? "..." : machineInfoLine_)
         .arg(s.cpuPercent, 0, 'f', 0).arg(s.ramPercent, 0, 'f', 0).arg(s.ramUsedGB, 0, 'f', 1).arg(s.diskPercent, 0, 'f', 0));
 
-    const DashSettings ds = loadDashSettings();
-    const bool alerts[3] = {s.cpuPercent >= ds.cpuThreshold, s.ramPercent >= ds.ramThreshold, s.diskPercent >= ds.diskThreshold};
+    const bool alerts[3] = {
+        s.cpuPercent >= cpuThreshold_,
+        s.ramPercent >= ramThreshold_,
+        s.diskPercent >= diskThreshold_
+    };
     const char* names[3] = {"CPU", "RAM", "Disk"};
     for (int i = 0; i < 3; i++)
     {

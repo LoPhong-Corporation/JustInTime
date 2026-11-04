@@ -578,10 +578,18 @@ select {
   transition: transform 160ms ease, box-shadow 180ms ease, filter 180ms ease, border-color 180ms ease, background-color 180ms ease;
 }
 
+.button .icon {
+  transition: transform 160ms ease;
+}
+
 .button:hover {
   transform: translateY(-2px);
   border-color: var(--accent);
   box-shadow: 0 4px 12px rgba(0, 0, 0, .12);
+}
+
+.button:hover .icon {
+  transform: translateX(2px);
 }
 
 .button:active {

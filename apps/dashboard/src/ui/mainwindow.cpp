@@ -244,7 +244,8 @@ void MainWindow::onAccountClicked()
 void MainWindow::openSettings()
 {
     const bool loggedIn = loadDashSession().has_value();
-    SettingsDialog dlg(loggedIn, [this] { updateAccountGlyph(); }, this);
+    SettingsDialog dlg(loggedIn, [this] { updateAccountGlyph(); },
+                       [this] { rightPanel_->reloadThresholds(); }, this);
     dlg.exec();
     updateAccountGlyph();
 }

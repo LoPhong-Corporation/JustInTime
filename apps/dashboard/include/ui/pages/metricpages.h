@@ -33,6 +33,7 @@ private:
     QLabel* info_;
     QGridLayout* coreGrid_;
     std::vector<QLabel*> coreBars_;
+    std::vector<bool> coreAlerts_;
     ChartWidget* history_;
     bool staticLoaded_ = false;
 };

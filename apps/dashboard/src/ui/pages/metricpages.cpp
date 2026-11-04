@@ -85,6 +85,7 @@ void CpuPage::refreshStaticInfo()
                 coreGrid_->addWidget(bar, i / 8, i % 8);
                 coreBars_.push_back(bar);
             }
+            coreAlerts_.assign(coreBars_.size(), false);
         });
 }
 
@@ -98,8 +99,14 @@ void CpuPage::tick()
     {
         const double v = s.cpuPerCore[i];
         coreBars_[i]->setText(QString::number(v, 'f', 0) + "%");
-        coreBars_[i]->setStyleSheet(QString("background:%1; border:1px solid #1c3a5e; border-radius:4px; color:#eef4fb; padding:4px;")
-            .arg(v >= 85 ? "#5a1f1f" : "#0f1c2e"));
+        const bool alert = v >= 85;
+        if (coreAlerts_[i] != alert)
+        {
+            coreBars_[i]->setStyleSheet(alert
+                ? "background:#5a1f1f; border:1px solid #1c3a5e; border-radius:4px; color:#eef4fb; padding:4px;"
+                : "background:#0f1c2e; border:1px solid #1c3a5e; border-radius:4px; color:#dce8f7; padding:4px;");
+            coreAlerts_[i] = alert;
+        }
     }
 }
 
@@ -170,14 +177,22 @@ void DiskPage::tick()
     info_->setText(QString("Primary drive: %1% used (%2 / %3 GB)")
         .arg(s.diskPercent, 0, 'f', 0).arg(s.diskUsedGB, 0, 'f', 0).arg(s.diskTotalGB, 0, 'f', 0));
 
-    partitionsTable_->setRowCount(static_cast<int>(s.disks.size()));
-    for (int i = 0; i < static_cast<int>(s.disks.size()); i++)
+    const int diskCount = static_cast<int>(s.disks.size());
+    if (partitionsTable_->rowCount() != diskCount)
+    {
+        partitionsTable_->setRowCount(diskCount);
+        for (int row = 0; row < diskCount; ++row)
+            for (int column = 0; column < 3; ++column)
+                partitionsTable_->setItem(row, column, new QTableWidgetItem);
+    }
+
+    for (int i = 0; i < diskCount; i++)
     {
         const auto& d = s.disks[static_cast<size_t>(i)];
-        partitionsTable_->setItem(i, 0, new QTableWidgetItem(QString::fromStdString(d.mountpoint)));
-        partitionsTable_->setItem(i, 1, new QTableWidgetItem(QString::number(d.percent, 'f', 0)));
-        partitionsTable_->setItem(i, 2, new QTableWidgetItem(
-            QString("%1 / %2 GB").arg(d.usedGB, 0, 'f', 0).arg(d.totalGB, 0, 'f', 0)));
+        partitionsTable_->item(i, 0)->setText(QString::fromStdString(d.mountpoint));
+        partitionsTable_->item(i, 1)->setText(QString::number(d.percent, 'f', 0));
+        partitionsTable_->item(i, 2)->setText(
+            QString("%1 / %2 GB").arg(d.usedGB, 0, 'f', 0).arg(d.totalGB, 0, 'f', 0));
     }
 
     // Thang tự co (không setFixedMax) vì tốc độ đĩa có thể vượt xa 100 (MB/s).
