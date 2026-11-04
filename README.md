@@ -241,7 +241,7 @@ kit used by the current CMake configuration. Run `installer\build.cmd`
 from an x64 Visual Studio Developer Command Prompt. It builds and
 deploys the Qt applications, builds the Go sidecar and Tauri dashboard,
 then writes
-`installer\dist\JustInTime-Setup-1.0.2.1.exe`.
+`installer\dist\JustInTime-Setup-1.0.2.2.exe`.
 
 The installer creates shortcuts for the agent, React/Tauri dashboard,
 and native Qt dashboard. The Go backend is installed under
