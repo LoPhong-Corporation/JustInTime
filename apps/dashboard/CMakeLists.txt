@@ -1,67 +1,63 @@
-# apps/dashboard - dashboard.exe: cửa sổ Qt Widgets xem số liệu hệ thống/
-# hoạt động/gia đình. KHÔNG có HTTP server (bản trước, dashboard-go, chạy
-# 1 web server cục bộ; bản này mở thẳng cửa sổ native). Tách khỏi
-# JustInTime.exe thành .exe riêng để build/chạy/debug độc lập không cần
-# đụng tới agent - xem README.md mục "Vì sao tách".
+# apps/dashboard - standalone Qt Widgets dashboard executable.
 add_executable(JustInTimeDashboard WIN32
         ../../resources/app_icon.qrc
         ../../resources/app_icon.rc
 
-        src/main.cpp
+        ../../src/dashboard/main.cpp
 
-        include/dashconfig.h
-        src/dashconfig.cpp
-        include/cloud.h
-        src/cloud.cpp
-        include/localdb.h
-        src/localdb.cpp
-        include/sysstats.h
-        src/sysstats.cpp
-        include/dashsettings.h
-        src/dashsettings.cpp
-        include/dashsession.h
-        src/dashsession.cpp
-        include/dashi18n.h
-        src/dashi18n.cpp
-        include/autostart.h
-        src/autostart.cpp
+        ../../includes/dashboard/dashconfig.h
+        ../../src/dashboard/dashconfig.cpp
+        ../../includes/dashboard/cloud.h
+        ../../src/dashboard/cloud.cpp
+        ../../includes/dashboard/localdb.h
+        ../../src/dashboard/localdb.cpp
+        ../../includes/dashboard/sysstats.h
+        ../../src/dashboard/sysstats.cpp
+        ../../includes/dashboard/dashsettings.h
+        ../../src/dashboard/dashsettings.cpp
+        ../../includes/dashboard/dashsession.h
+        ../../src/dashboard/dashsession.cpp
+        ../../includes/dashboard/dashi18n.h
+        ../../src/dashboard/dashi18n.cpp
+        ../../includes/dashboard/autostart.h
+        ../../src/dashboard/autostart.cpp
 
-        include/ui/asyncutil.h
-        include/ui/theme.h
-        include/ui/leftrail.h
-        src/ui/leftrail.cpp
-        include/ui/machinessidebar.h
-        src/ui/machinessidebar.cpp
-        include/ui/rightpanel.h
-        src/ui/rightpanel.cpp
-        include/ui/chartwidget.h
-        src/ui/chartwidget.cpp
-        include/ui/gaugewidget.h
-        src/ui/gaugewidget.cpp
-        include/ui/timelinewidget.h
-        src/ui/timelinewidget.cpp
-        include/ui/logindialog.h
-        src/ui/logindialog.cpp
-        include/ui/settingsdialog.h
-        src/ui/settingsdialog.cpp
-        include/ui/mainwindow.h
-        src/ui/mainwindow.cpp
-        include/ui/pages/overviewpage.h
-        src/ui/pages/overviewpage.cpp
-        include/ui/pages/metricpages.h
-        src/ui/pages/metricpages.cpp
-        include/ui/pages/localpage.h
-        src/ui/pages/localpage.cpp
-        include/ui/pages/cloudpage.h
-        src/ui/pages/cloudpage.cpp
-        include/ui/pages/devicespage.h
-        src/ui/pages/devicespage.cpp
-        include/ui/pages/familypage.h
-        src/ui/pages/familypage.cpp
+        ../../includes/dashboard/ui/asyncutil.h
+        ../../includes/dashboard/ui/theme.h
+        ../../includes/dashboard/ui/leftrail.h
+        ../../src/dashboard/ui/leftrail.cpp
+        ../../includes/dashboard/ui/machinessidebar.h
+        ../../src/dashboard/ui/machinessidebar.cpp
+        ../../includes/dashboard/ui/rightpanel.h
+        ../../src/dashboard/ui/rightpanel.cpp
+        ../../includes/dashboard/ui/chartwidget.h
+        ../../src/dashboard/ui/chartwidget.cpp
+        ../../includes/dashboard/ui/gaugewidget.h
+        ../../src/dashboard/ui/gaugewidget.cpp
+        ../../includes/dashboard/ui/timelinewidget.h
+        ../../src/dashboard/ui/timelinewidget.cpp
+        ../../includes/dashboard/ui/logindialog.h
+        ../../src/dashboard/ui/logindialog.cpp
+        ../../includes/dashboard/ui/settingsdialog.h
+        ../../src/dashboard/ui/settingsdialog.cpp
+        ../../includes/dashboard/ui/mainwindow.h
+        ../../src/dashboard/ui/mainwindow.cpp
+        ../../includes/dashboard/ui/pages/overviewpage.h
+        ../../src/dashboard/ui/pages/overviewpage.cpp
+        ../../includes/dashboard/ui/pages/metricpages.h
+        ../../src/dashboard/ui/pages/metricpages.cpp
+        ../../includes/dashboard/ui/pages/localpage.h
+        ../../src/dashboard/ui/pages/localpage.cpp
+        ../../includes/dashboard/ui/pages/cloudpage.h
+        ../../src/dashboard/ui/pages/cloudpage.cpp
+        ../../includes/dashboard/ui/pages/devicespage.h
+        ../../src/dashboard/ui/pages/devicespage.cpp
+        ../../includes/dashboard/ui/pages/familypage.h
+        ../../src/dashboard/ui/pages/familypage.cpp
 )
 
 target_include_directories(JustInTimeDashboard PRIVATE
-        include
+        ../../includes/dashboard
         third_party
         third_party/nlohmann
 )

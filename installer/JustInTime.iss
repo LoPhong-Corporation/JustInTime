@@ -34,7 +34,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb;*.ilk;*.exp;*.lib;*.obj;*.idb;*.ipch;*.tlog;*.lastbuildstate"
-Source: "..\JITDashboard\src-tauri\target\release\jitdashboard.exe"; DestDir: "{app}"; Flags: ignoreversion; DestName: "jitdashboard.exe"
+Source: "..\apps\dashboard-web\desktop\src-tauri\target\release\jitdashboard.exe"; DestDir: "{app}"; Flags: ignoreversion; DestName: "jitdashboard.exe"
 
 [Icons]
 Name: "{group}\JustInTime"; Filename: "{app}\JustInTime.exe"; WorkingDir: "{app}"

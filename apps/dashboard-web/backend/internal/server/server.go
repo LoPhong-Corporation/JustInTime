@@ -1480,7 +1480,7 @@ func (s *Server) handleParentChildren(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// RBAC: gộp permission_level vào từng link (xem
-	// migrations/005_permission_levels.sql). Lỗi ở bước này không nên
+	// migrations/006_permission_levels.sql). Lỗi ở bước này không nên
 	// chặn cả trang - nếu không lấy được, coi như "full" (giá trị mặc
 	// định của migration) để không đột ngột khoá quyền ai cả.
 	perms, permErr := withAuthRetry(s, r.Context(), func(c *cloud.Client) (map[int64]string, error) {
@@ -1778,7 +1778,7 @@ func (s *Server) handleParentLimitSet(w http.ResponseWriter, r *http.Request) {
 		dailyLimitSec = &sec
 	}
 
-	// RBAC (xem migrations/005_permission_levels.sql): phụ huynh với
+	// RBAC (xem migrations/006_permission_levels.sql): phụ huynh với
 	// quyền "view_only" chỉ được XEM, không được đặt giới hạn app.
 	if s.permissionForChild(r.Context(), req.ChildUserID) != "full" {
 		writeErr(w, http.StatusForbidden, "Bạn chỉ có quyền xem (view-only) với tài khoản này, không thể đặt giới hạn app.")

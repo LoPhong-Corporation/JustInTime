@@ -366,7 +366,6 @@ FodyWeavers.xsd
 !/installer/
 !/installer/JustInTime.iss
 !/installer/build.cmd
-!/installer/app.ico
 !/installer/LICENSE.txt
 /installer/dist/
 
@@ -379,3 +378,6 @@ build.ninja
 .ninja_log
 *.vcxproj
 *.vcxproj.filters
+
+# Build artifacts kept beside the web dashboard sources
+/apps/dashboard-web/backend/dashboard.exe

@@ -4,6 +4,63 @@ Project build ra **2 file `.exe` độc lập** (xem `README.md` mục
 "Project Structure" để biết vì sao tách): `JustInTime.exe` (agent) và
 `JustInTimeDashboard.exe` (dashboard). Cả 2 cùng dùng `libs/common/`.
 
+## Cấu trúc mã nguồn
+
+Toàn bộ mã C++ native được gom vào hai thư mục cấp gốc: header trong
+`includes/` và phần triển khai trong `src/`. Các thư mục con giữ ranh
+giới giữa agent, dashboard và thư viện dùng chung:
+
+```text
+JustInTime/
+├── includes/
+│   ├── agent/
+│   │   ├── agent/
+│   │   ├── core/
+│   │   ├── parent/
+│   │   └── shared/
+│   ├── common/
+│   └── dashboard/
+│       └── ui/
+├── src/
+│   ├── agent/
+│   │   ├── agent/
+│   │   ├── core/
+│   │   ├── parent/
+│   │   └── shared/
+│   ├── common/
+│   └── dashboard/
+│       └── ui/
+├── apps/
+│   ├── agent/
+│   │   └── CMakeLists.txt
+│   ├── dashboard/
+│   │   ├── CMakeLists.txt
+│   │   ├── tests/
+│   │   └── third_party/
+│   └── dashboard-web/
+│       ├── backend/       Go API + web UI nhúng
+│       │   ├── cmd/
+│       │   └── internal/
+│       └── desktop/       React + Tauri
+│           ├── src/
+│           └── src-tauri/
+├── libs/
+│   └── common/            CMake definition của thư viện native dùng chung
+├── migrations/            Supabase schema và migrations
+├── resources/             Icon và tài nguyên Windows/Qt
+├── docs/                  Hướng dẫn build và tài liệu dự án
+├── installer/             Script build và cấu hình Inno Setup
+├── CMakeLists.txt
+└── out/                   Thư mục build cục bộ, không phải mã nguồn
+```
+
+Header và source của C++ nằm tập trung ở cấp gốc, phân tách theo component
+trong `includes/agent`, `includes/dashboard`, `includes/common` và các
+nhánh tương ứng trong `src/`. CMake của từng app vẫn ở `apps/`; dependencies,
+tests và tài nguyên riêng vẫn nằm cùng app đó. Thư viện dùng chung được
+khai báo tại `libs/common/`, còn mã nguồn thực tế nằm trong `includes/common/`
+và `src/common/`.
+
 ---
 
 ## 1. Yêu cầu

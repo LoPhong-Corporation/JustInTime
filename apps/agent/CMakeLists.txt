@@ -1,92 +1,78 @@
 # apps/agent - JustInTime.exe: theo dõi hoạt động, tray, Control Panel,
 # đồng bộ cloud. Mở Dashboard (apps/dashboard) bằng cách spawn
-# dashboard.exe như 1 tiến trình riêng (xem TrayIcon::onOpenDashboard()
-# trong src/agent/trayicon.cpp) - 2 app KHÔNG build chung 1 target.
-#
-# ------------------------------------------------------------------
-# Toàn bộ phần "core" (dữ liệu/mạng/đồng bộ) của app đã được chuyển
-# hoàn toàn từ C sang C++ (RAII cho HANDLE/HINTERNET/sqlite3_stmt*,
-# std::string/std::vector thay buffer cấp phát tay, std::mutex thay
-# CRITICAL_SECTION tự quản...) - xem ghi chú "Đã CHUYỂN TỪ C SANG
-# C++" ở đầu mỗi file .cpp trong src/shared/, src/agent/, src/core/
-# để biết chi tiết từng thay đổi.
-# ------------------------------------------------------------------
+# dashboard.exe như 1 tiến trình riêng - 2 app KHÔNG build chung 1 target.
 
 add_executable(JustInTime WIN32
         ../../resources/app_icon.qrc
         ../../resources/app_icon.rc
 
-        # ---- shared/ : dùng chung bởi cả vai trò agent (con) và parent,
-        # RIÊNG của app này - không nhầm với libs/common (xem đầu file đó
-        # để biết ranh giới: cái gì CHỈ agent cần thì ở đây, cái gì cả
-        # dashboard cũng cần thì ở libs/common) ----
-        src/shared/restclient.cpp
-        include/shared/restclient.h
-        src/shared/jsonutil.cpp
-        include/shared/jsonutil.h
-        src/shared/device.cpp
-        include/shared/device.h
-        src/shared/machines.cpp
-        include/shared/machines.h
-        src/shared/backup.cpp
-        include/shared/backup.h
-        src/shared/applimits.cpp
-        include/shared/applimits.h
-        src/shared/parentlink.cpp
-        include/shared/parentlink.h
-        src/shared/settings.cpp
-        include/shared/settings.h
-        src/shared/network.cpp
-        include/shared/network.h
-        src/shared/auth.cpp
-        include/shared/auth.h
-        src/shared/i18n.cpp
-        include/shared/i18n.h
-        src/shared/database.cpp
-        include/shared/database.h
-        include/shared/config.h
-        include/shared/error_codes.h
-        include/agent/batchsend.h
+        # Agent-only shared modules.
+        ../../src/agent/shared/restclient.cpp
+        ../../includes/agent/shared/restclient.h
+        ../../src/agent/shared/jsonutil.cpp
+        ../../includes/agent/shared/jsonutil.h
+        ../../src/agent/shared/device.cpp
+        ../../includes/agent/shared/device.h
+        ../../src/agent/shared/machines.cpp
+        ../../includes/agent/shared/machines.h
+        ../../src/agent/shared/backup.cpp
+        ../../includes/agent/shared/backup.h
+        ../../src/agent/shared/applimits.cpp
+        ../../includes/agent/shared/applimits.h
+        ../../src/agent/shared/parentlink.cpp
+        ../../includes/agent/shared/parentlink.h
+        ../../src/agent/shared/settings.cpp
+        ../../includes/agent/shared/settings.h
+        ../../src/agent/shared/network.cpp
+        ../../includes/agent/shared/network.h
+        ../../src/agent/shared/auth.cpp
+        ../../includes/agent/shared/auth.h
+        ../../src/agent/shared/i18n.cpp
+        ../../includes/agent/shared/i18n.h
+        ../../src/agent/shared/database.cpp
+        ../../includes/agent/shared/database.h
+        ../../includes/agent/shared/config.h
+        ../../includes/agent/shared/error_codes.h
+        ../../includes/agent/agent/batchsend.h
 
-        # ---- core/ : engine theo dõi hoạt động ----
-        src/core/activity.cpp
-        include/core/activity.h
+        # Activity-tracking engine.
+        ../../src/agent/core/activity.cpp
+        ../../includes/agent/core/activity.h
 
-        # ---- agent/ : vai trò "con" (tray UI, Control Panel, sync,
-        # remote view, entrypoint) ----
-        src/agent/main.cpp
-        "include/agent/trayicon.h"
-        src/agent/trayicon.cpp
-        "include/agent/controlpanelwindow.h"
-        src/agent/controlpanelwindow.cpp
-        "include/agent/loginpage.h"
-        src/agent/loginpage.cpp
-        "include/agent/settingspage.h"
-        src/agent/settingspage.cpp
-        "include/agent/supabasesetuppage.h"
-        src/agent/supabasesetuppage.cpp
-        "include/agent/remoteviewpage.h"
-        src/agent/remoteviewpage.cpp
-        "include/agent/updatechecker.h"
-        src/agent/updatechecker.cpp
-        include/agent/remoteview.h
-        src/agent/remoteview.cpp
-        include/agent/sync.h
-        src/agent/sync.cpp
-        "include/agent/parentlinkpage.h"
-        src/agent/parentlinkpage.cpp
+        # Agent UI, sync, and entrypoint.
+        ../../src/agent/agent/main.cpp
+        ../../includes/agent/agent/trayicon.h
+        ../../src/agent/agent/trayicon.cpp
+        ../../includes/agent/agent/controlpanelwindow.h
+        ../../src/agent/agent/controlpanelwindow.cpp
+        ../../includes/agent/agent/loginpage.h
+        ../../src/agent/agent/loginpage.cpp
+        ../../includes/agent/agent/settingspage.h
+        ../../src/agent/agent/settingspage.cpp
+        ../../includes/agent/agent/supabasesetuppage.h
+        ../../src/agent/agent/supabasesetuppage.cpp
+        ../../includes/agent/agent/remoteviewpage.h
+        ../../src/agent/agent/remoteviewpage.cpp
+        ../../includes/agent/agent/updatechecker.h
+        ../../src/agent/agent/updatechecker.cpp
+        ../../includes/agent/agent/remoteview.h
+        ../../src/agent/agent/remoteview.cpp
+        ../../includes/agent/agent/sync.h
+        ../../src/agent/agent/sync.cpp
+        ../../includes/agent/agent/parentlinkpage.h
+        ../../src/agent/agent/parentlinkpage.cpp
 
-        # ---- parent/ : vai trò "phụ huynh" (xem dữ liệu con + đặt giới hạn) ----
-        "include/parent/parentpage.h"
-        src/parent/parentpage.cpp
+        # Parent role UI.
+        ../../includes/agent/parent/parentpage.h
+        ../../src/agent/parent/parentpage.cpp
 )
 
 target_include_directories(JustInTime PRIVATE
-        include
-        include/shared
-        include/core
-        include/agent
-        include/parent
+        ../../includes/agent
+        ../../includes/agent/shared
+        ../../includes/agent/core
+        ../../includes/agent/agent
+        ../../includes/agent/parent
 )
 
 target_link_libraries(JustInTime PRIVATE

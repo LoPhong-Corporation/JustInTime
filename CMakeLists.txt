@@ -1,13 +1,9 @@
 # JustInTime - monorepo gốc.
 #
-# Cấu trúc (xem README.md cho sơ đồ đầy đủ + lý do tách):
-#   libs/common/     - tiện ích CHUNG (log, HTTP client, đường dẫn
-#                       %APPDATA%, sqlite3) - thư viện tĩnh, không tự nó
-#                       build ra .exe nào.
-#   apps/agent/      - JustInTime.exe: theo dõi hoạt động, tray, Control
-#                       Panel, đồng bộ cloud.
-#   apps/dashboard/  - dashboard.exe: cửa sổ xem số liệu/quản lý gia đình
-#                       (Qt Widgets, không HTTP server).
+# C++ headers and sources are grouped by component under root includes/
+# and src/. Build definitions and app-specific resources remain under apps/.
+# libs/common/ defines the shared static library; apps/agent/ and
+# apps/dashboard/ define the two separate native executables.
 #
 # 2 app build RA 2 FILE .exe RIÊNG (không gộp chung 1 target nữa) - xem
 # README.md mục "Vì sao tách" để biết lý do và đánh đổi so với bản gộp
@@ -37,8 +33,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # CMake thường KHÔNG tự tìm thấy Qt6 (nó không nằm trong PATH mặc định) -
 # phải trỏ đường dẫn qua CMAKE_PREFIX_PATH lúc configure, ví dụ:
 #   cmake -B build -DCMAKE_PREFIX_PATH="C:/Qt/6.7.0/msvc2019_64"
-# (thay 6.7.0/msvc2019_64 bằng đúng phiên bản/kit Qt bạn đã cài - xem
-# HUONG_DAN_BUILD.md mục 2 để biết cách tìm đường dẫn này).
+# (thay bằng đúng phiên bản/kit Qt bạn đã cài - xem
+# docs/HOW_TO_BUILD.md để biết cách tìm đường dẫn này).
 #
 # Dòng dưới đây chỉ là "lưới an toàn": nếu bạn QUÊN truyền
 # -DCMAKE_PREFIX_PATH, CMake sẽ thử luôn biến môi trường Qt6_DIR (nếu có)

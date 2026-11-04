@@ -654,7 +654,7 @@ func (c *Client) RevokeLink(ctx context.Context, linkID int64) error {
 }
 
 // ---------------------------------------------------------------------
-// Permission levels (see migrations/005_permission_levels.sql) - RBAC
+// Permission levels (see migrations/006_permission_levels.sql) - RBAC
 // on top of parent_links: a parent-child link is either "full" (can
 // view + set/delete app limits) or "view_only" (can view usage only).
 // Read/written by SELECT/PATCH straight against the parent_links

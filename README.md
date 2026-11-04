@@ -82,34 +82,27 @@ API and a React/Tauri desktop dashboard:
 
 ```text
 JustInTime/
-├── libs/common/        Static library shared by BOTH executables below:
-│                        logging (log.h), the WinHTTP client used for every
-│                        Supabase call (httpclient.h), %APPDATA%\JustInTime
-│                        path resolution (paths.h, configdir.h), small
-│                        string/JSON helpers (strutil.h), and sqlite3
-│                        (compiled once here, not duplicated).
-│
-├── apps/agent/          JustInTime.exe - the background agent: activity
-│   ├── include/          monitoring, system tray, Control Panel, cloud
-│   └── src/               sync, parent-link / app-limit enforcement.
-│       ├── core/          Activity-tracking engine.
-│       ├── shared/        Agent-only support modules (auth, database,
-│       │                   device id, REST client, settings, i18n...).
-│       ├── agent/         Tray, Control Panel pages, entrypoint.
-│       └── parent/        The "parent" role page (view a child's data).
-│
-├── apps/dashboard/      JustInTimeDashboard.exe - a separate native Qt
-│   ├── include/           window for browsing activity history, cloud
-│   └── src/                data, devices, and family/parental controls.
-│       └── ui/            No HTTP server, no browser - opens instantly.
-│
-├── third_party/         sqlite3 (used by libs/common), nothing else
-│                          shared - apps/dashboard/third_party/ has its
-│                          own nlohmann/json (only it needs JSON parsing).
-├── DashboardWebApp/     Go API and local web dashboard used by the
-│                          React/Tauri dashboard for account-backed features.
-└── JITDashboard/        React/Tauri desktop dashboard; it starts the Go
-                           backend sidecar when installed.
+├── includes/             All native C++ headers, grouped by component.
+│   ├── agent/             Agent-only headers: agent/, core/, parent/, shared/.
+│   ├── common/            Headers shared by agent and native dashboard.
+│   └── dashboard/         Native dashboard headers, including ui/.
+├── src/                   All native C++ implementations, grouped the same way.
+│   ├── agent/             Activity tracking, sync, tray, and parent UI.
+│   ├── common/            Shared logging, HTTP, and configuration utilities.
+│   └── dashboard/         Qt dashboard and its UI.
+├── apps/
+│   ├── agent/             CMake target for JustInTime.exe.
+│   ├── dashboard/         CMake target, tests, and dashboard-only dependencies.
+│   └── dashboard-web/
+│       ├── backend/       Go API and embedded web dashboard.
+│       └── desktop/       React/Tauri desktop app; starts the Go sidecar.
+├── libs/common/           CMake definition for the shared native library.
+├── third_party/           Shared SQLite dependency; dashboard-only JSON lives
+│                          under apps/dashboard/third_party/.
+├── migrations/          All Supabase schema and incremental SQL migrations.
+├── docs/                Build and contributor documentation.
+├── installer/           Inno Setup script and Windows build entry point.
+└── supabase/            Edge Functions and Supabase project configuration.
 ```
 
 ### Why two executables instead of one
@@ -117,7 +110,7 @@ JustInTime/
 JustInTime.exe can open the Dashboard from its tray menu ("Open
 Dashboard") at any time - it launches `JustInTimeDashboard.exe`, which
 sits right next to it after a build (`TrayIcon::onOpenDashboard()` in
-`apps/agent/src/agent/trayicon.cpp`). Keeping them separate (rather than
+`src/agent/agent/trayicon.cpp`). Keeping them separate (rather than
 one combined binary) means:
 
 - Each app builds, and can be debugged, **independently** - no need to
@@ -126,7 +119,7 @@ one combined binary) means:
 - A crash or hang in the Dashboard UI can never take the background
   activity-tracking process down with it.
 - `libs/common` is the only thing that must stay in sync between them -
-  everything else (`apps/agent/src/shared/*`, `apps/dashboard/src/*`) is
+  everything else (`src/agent/shared/*`, `src/dashboard/*`) is
   free to diverge without risk of silently affecting the other app. See
   the comment at the top of `libs/common/CMakeLists.txt` for the rule of
   thumb on what belongs there (used by *both* apps) versus what belongs
@@ -135,7 +128,7 @@ one combined binary) means:
 Because `JustInTimeDashboard.exe` has no HTTP server anymore (the earlier
 Go version did), "already running?" is detected with a named mutex +
 `FindWindow`/`SetForegroundWindow` instead of a port check - see
-`apps/dashboard/src/main.cpp`.
+`src/dashboard/main.cpp`.
 
 ---
 
@@ -242,6 +235,10 @@ from an x64 Visual Studio Developer Command Prompt. It builds and
 deploys the Qt applications, builds the Go sidecar and Tauri dashboard,
 then writes
 `installer\dist\JustInTime-Setup-1.0.2.2.exe`.
+
+For native build prerequisites and manual CMake steps, see
+[`docs/HOW_TO_BUILD.md`](docs/HOW_TO_BUILD.md), which also documents the
+root-level `includes/` and `src/` layout for native C++.
 
 The installer creates shortcuts for the agent, React/Tauri dashboard,
 and native Qt dashboard. The Go backend is installed under

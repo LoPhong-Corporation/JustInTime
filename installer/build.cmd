@@ -43,7 +43,7 @@ if errorlevel 1 exit /b %errorlevel%
 if errorlevel 1 exit /b %errorlevel%
 
 if not exist "%BUILD_DIR%\dashboard-go" mkdir "%BUILD_DIR%\dashboard-go"
-pushd "%ROOT%\DashboardWebApp"
+pushd "%ROOT%\apps\dashboard-web\backend"
 go build -trimpath -ldflags="-s -w" -o "%BUILD_DIR%\dashboard-go\dashboard.exe" .\cmd\dashboard
 if errorlevel 1 (
     popd
@@ -51,7 +51,7 @@ if errorlevel 1 (
 )
 popd
 
-pushd "%ROOT%\JITDashboard"
+pushd "%ROOT%\apps\dashboard-web\desktop"
 if not exist node_modules call npm ci
 if errorlevel 1 (
     popd
