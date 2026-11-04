@@ -8,6 +8,7 @@
 #define UI_LEFTRAIL_H
 
 #include <QWidget>
+#include <QIcon>
 #include <functional>
 #include <vector>
 
@@ -22,16 +23,11 @@ class LeftRail : public QWidget
 public:
     explicit LeftRail(QWidget* parent = nullptr);
 
-    // glyph: 1 ký tự/emoji hiển thị trên nút (xem chú thích ở mainwindow.cpp
-    // về lý do dùng glyph thay vì file icon). Trả về index (0-based) để
-    // gọi setCurrentIndex() sau này.
-    int addSection(const QString& glyph, const QString& tooltip);
+    int addSection(const QIcon& icon, const QString& tooltip);
     void setCurrentIndex(int index);
     int currentIndex() const { return currentIndex_; }
 
-    // Nút tài khoản riêng ở đáy rail - glyph đổi được (vd chữ cái đầu
-    // email khi đã đăng nhập) vì không thuộc nhóm chọn-1 ở trên.
-    void setAccountGlyph(const QString& glyph, const QString& tooltip);
+    void setAccountGlyph(const QString& label, const QString& tooltip);
 
     std::function<void(int)> onSectionSelected;
     std::function<void()> onAccountClicked;

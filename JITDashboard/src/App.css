@@ -121,17 +121,16 @@ select:focus-visible {
 
 .brand-mark {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  border-radius: 5px;
-  background: conic-gradient(var(--accent) 0 70%, var(--line) 0);
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
   transition: transform 280ms cubic-bezier(.2, .7, .25, 1), box-shadow 280ms ease;
 }
 
 .sidebar-brand:hover .brand-mark {
-  transform: rotate(45deg) scale(1.08);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 5px var(--accent-soft));
 }
 
 .icon {
@@ -311,6 +310,13 @@ select:focus-visible {
   border-color: var(--warn);
   color: var(--warn);
   overflow-wrap: anywhere;
+}
+
+.oauth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 h1,

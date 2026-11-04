@@ -27,6 +27,7 @@
 #include <QMessageBox>
 #include <QSystemTrayIcon>
 #include <QMetaObject>
+#include <QIcon>
 
 #include <windows.h>
 #include <wtsapi32.h>
@@ -299,6 +300,9 @@ static void cloudLoop()
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+    app.setApplicationName("JustInTime");
+    app.setApplicationDisplayName("JustInTime");
+    app.setWindowIcon(QIcon(":/branding/icon.ico"));
 
     /*
      * Không thoát app khi đóng dialog cuối cùng (Settings, Login...) -

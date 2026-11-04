@@ -6,7 +6,7 @@
 
 #include <QApplication>
 #include <QMessageBox>
-#include <QStyle>
+#include <QIcon>
 #include <QProcess>
 #include <QDesktopServices>
 #include <QUrl>
@@ -84,7 +84,7 @@ QString tr_(const char *key)
 
 TrayIcon::TrayIcon(QObject *parent) : QObject(parent)
 {
-    m_trayIcon.setIcon(qApp->style()->standardIcon(QStyle::SP_ComputerIcon));
+    m_trayIcon.setIcon(qApp->windowIcon());
 
     /*
      * Cửa sổ điều khiển trung tâm - tạo 1 lần, ẩn cho tới khi

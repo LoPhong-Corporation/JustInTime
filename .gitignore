@@ -362,4 +362,20 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-/installer
+/installer/*
+!/installer/
+!/installer/JustInTime.iss
+!/installer/build.cmd
+!/installer/app.ico
+!/installer/LICENSE.txt
+/installer/dist/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+build.ninja
+.ninja_deps
+.ninja_log
+*.vcxproj
+*.vcxproj.filters

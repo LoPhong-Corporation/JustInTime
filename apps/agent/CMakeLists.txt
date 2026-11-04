@@ -13,6 +13,9 @@
 # ------------------------------------------------------------------
 
 add_executable(JustInTime WIN32
+        ../../resources/app_icon.qrc
+        ../../resources/app_icon.rc
+
         # ---- shared/ : dùng chung bởi cả vai trò agent (con) và parent,
         # RIÊNG của app này - không nhầm với libs/common (xem đầu file đó
         # để biết ranh giới: cái gì CHỈ agent cần thì ở đây, cái gì cả

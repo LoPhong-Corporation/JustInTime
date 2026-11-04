@@ -42,7 +42,7 @@ The Go version also adds:
 ## Project layout
 
 ```
-dashboard-go/
+DashboardWebApp/
   cmd/dashboard/main.go        entry point (HTTP server + tray)
   internal/
     config/        paths shared with the C agent (%APPDATA%\JustInTime)
@@ -66,9 +66,9 @@ Requires Go 1.22+ and internet access on the *build* machine (to fetch
 `.exe` needs no runtime dependencies at all.
 
 ```bash
-cd dashboard-go
+cd DashboardWebApp
 go mod tidy
-GOOS=windows GOARCH=amd64 go build -o dashboard.exe ./cmd/dashboard
+go build -o dashboard.exe ./cmd/dashboard
 ```
 
 Run it locally for development (works on Linux/macOS too, minus the
@@ -81,6 +81,12 @@ go run ./cmd/dashboard
 Then open http://127.0.0.1:5000 (same port the Python version used).
 The local API also allows CORS only from the Tauri app origin and the
 localhost Vite development ports used by `JITDashboard`.
+
+The installed Tauri dashboard starts this executable beside itself from
+`dashboard-go\dashboard.exe` with `--headless`. In this mode the Go
+process serves the local API without opening a browser or adding a
+second tray icon; it stops when the Tauri window closes. Run the Go
+dashboard directly (without `--headless`) to use its embedded web UI.
 
 ## Setting up device messaging
 

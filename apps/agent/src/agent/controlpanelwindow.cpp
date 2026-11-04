@@ -19,6 +19,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QFrame>
+#include <QIcon>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QStyle>
@@ -53,32 +54,40 @@ static QString tr_(const char *key)
     return QString::fromUtf8(i18n_t(key));
 }
 
-// Icon nhỏ (emoji) theo NHÓM ứng dụng, chọn bằng cách khớp từ khoá
-// đơn giản trên tên process - agent C không lưu đường dẫn đầy đủ của
-// exe (chỉ tên), nên không thể trích icon THẬT của từng app một
-// cách đáng tin cậy; icon theo nhóm vẫn cho cảm giác trực quan, dễ
-// quét mắt hơn nhiều so với 1 khối text phẳng như trước đây.
-static QString iconForProcess(const QString &processNameRaw)
+static QIcon iconForProcess(const QString &processNameRaw)
 {
     const QString p = processNameRaw.toLower();
 
-    struct Rule { const char *needle; const char *emoji; };
+    struct Rule { const char *needle; QStyle::StandardPixmap icon; };
     static const Rule rules[] = {
-        {"chrome",    "🌐"}, {"firefox",  "🌐"}, {"msedge",   "🌐"}, {"opera", "🌐"}, {"brave", "🌐"},
-        {"discord",   "💬"}, {"zalo",     "💬"}, {"telegram", "💬"}, {"messenger", "💬"}, {"slack", "💬"},
-        {"code",      "🧑‍💻"}, {"devenv",   "🧑‍💻"}, {"pycharm",  "🧑‍💻"}, {"clion", "🧑‍💻"}, {"idea", "🧑‍💻"},
-        {"steam",     "🎮"}, {"riot",     "🎮"}, {"valorant", "🎮"}, {"leagueclient", "🎮"}, {"epicgames", "🎮"},
-        {"word",      "📄"}, {"excel",    "📊"}, {"powerpnt", "📊"}, {"acrobat", "📄"}, {"onenote", "📝"},
-        {"spotify",   "🎵"}, {"vlc",      "🎬"}, {"potplayer","🎬"}, {"itunes", "🎵"},
-        {"explorer",  "🗂️"}, {"cmd",      "⌨️"}, {"powershell","⌨️"}, {"terminal", "⌨️"},
-        {"photoshop", "🎨"}, {"figma",    "🎨"}, {"illustrator","🎨"},
+        {"chrome", QStyle::SP_BrowserReload}, {"firefox", QStyle::SP_BrowserReload},
+        {"msedge", QStyle::SP_BrowserReload}, {"opera", QStyle::SP_BrowserReload},
+        {"brave", QStyle::SP_BrowserReload},
+        {"discord", QStyle::SP_MessageBoxInformation}, {"zalo", QStyle::SP_MessageBoxInformation},
+        {"telegram", QStyle::SP_MessageBoxInformation}, {"messenger", QStyle::SP_MessageBoxInformation},
+        {"slack", QStyle::SP_MessageBoxInformation},
+        {"code", QStyle::SP_FileDialogDetailedView}, {"devenv", QStyle::SP_FileDialogDetailedView},
+        {"pycharm", QStyle::SP_FileDialogDetailedView}, {"clion", QStyle::SP_FileDialogDetailedView},
+        {"idea", QStyle::SP_FileDialogDetailedView},
+        {"steam", QStyle::SP_MediaPlay}, {"riot", QStyle::SP_MediaPlay},
+        {"valorant", QStyle::SP_MediaPlay}, {"leagueclient", QStyle::SP_MediaPlay},
+        {"epicgames", QStyle::SP_MediaPlay},
+        {"word", QStyle::SP_FileIcon}, {"excel", QStyle::SP_FileIcon},
+        {"powerpnt", QStyle::SP_FileIcon}, {"acrobat", QStyle::SP_FileIcon},
+        {"onenote", QStyle::SP_FileIcon},
+        {"spotify", QStyle::SP_MediaVolume}, {"vlc", QStyle::SP_MediaVolume},
+        {"potplayer", QStyle::SP_MediaVolume}, {"itunes", QStyle::SP_MediaVolume},
+        {"explorer", QStyle::SP_DirIcon}, {"cmd", QStyle::SP_CommandLink},
+        {"powershell", QStyle::SP_CommandLink}, {"terminal", QStyle::SP_CommandLink},
+        {"photoshop", QStyle::SP_DialogApplyButton}, {"figma", QStyle::SP_DialogApplyButton},
+        {"illustrator", QStyle::SP_DialogApplyButton},
     };
 
     for (const auto &rule : rules)
         if (p.contains(QString::fromLatin1(rule.needle)))
-            return QString::fromUtf8(rule.emoji);
+            return QApplication::style()->standardIcon(rule.icon);
 
-    return QStringLiteral("🖥️"); // mặc định: app không nhận diện được nhóm
+    return QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
 }
 
 // Xoá phần mở rộng ".exe" cho gọn khi hiển thị (agent lưu nguyên tên
@@ -141,7 +150,7 @@ ControlPanelWindow::ControlPanelWindow(QWidget *parent) : QMainWindow(parent)
     brandLayout->setSpacing(10);
 
     auto *brandIcon = new QLabel(brandBar);
-    brandIcon->setPixmap(style()->standardIcon(QStyle::SP_ComputerIcon).pixmap(22, 22));
+    brandIcon->setPixmap(qApp->windowIcon().pixmap(22, 22));
 
     auto *brandText = new QLabel("JustInTime", brandBar);
     brandText->setObjectName("brandText");
@@ -542,9 +551,10 @@ void ControlPanelWindow::refreshOverview()
 
         QString processName = QString::fromWCharArray(entries[i].process_name);
 
-        auto *iconLabel = new QLabel(iconForProcess(processName), row);
-        iconLabel->setStyleSheet("font-size: 16px;");
-        iconLabel->setFixedWidth(24);
+        auto *iconLabel = new QLabel(row);
+        iconLabel->setPixmap(iconForProcess(processName).pixmap(18, 18));
+        iconLabel->setFixedSize(24, 24);
+        iconLabel->setAlignment(Qt::AlignCenter);
 
         auto *nameLabel = new QLabel(prettyProcessName(processName), row);
         nameLabel->setStyleSheet("color: #eef4fb;");

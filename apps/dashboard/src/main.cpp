@@ -20,6 +20,7 @@
 #include <windows.h>
 
 #include <QApplication>
+#include <QIcon>
 
 #include <memory>
 
@@ -29,7 +30,7 @@ constexpr wchar_t kSingleInstanceMutexName[] = L"Local\\JustInTimeDashboard_Sing
 // Qt đặt tên lớp cửa sổ kiểu "QWidgetClassWindow" không ổn định giữa các
 // bản Qt khác nhau - dùng windowTitle() cố định (đặt dưới đây) để FindWindowW
 // tìm đúng cửa sổ, đáng tin cậy hơn dò theo class name.
-constexpr wchar_t kWindowTitle[] = L"JustInTime Dashboard";
+constexpr wchar_t kWindowTitle[] = L"JustInTime - Thời Gian Máy";
 
 } // namespace
 
@@ -53,7 +54,9 @@ int main(int argc, char* argv[])
     }
 
     QApplication app(argc, argv);
-    app.setApplicationName("JustInTime Dashboard");
+    app.setApplicationName("JustInTime");
+    app.setApplicationDisplayName(QString::fromWCharArray(kWindowTitle));
+    app.setWindowIcon(QIcon(":/branding/icon.ico"));
 
     jit::dash::Config cfg = jit::dash::load();
     auto db = jit::dash::LocalDB::open(cfg.localDbPathUtf8);

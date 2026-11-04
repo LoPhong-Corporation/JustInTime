@@ -4,8 +4,12 @@
 #include "dashsession.h"
 
 #include <QDateTime>
+#include <QColor>
+#include <QIcon>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPainter>
+#include <QPixmap>
 #include <QVBoxLayout>
 
 namespace jit::dash::ui {
@@ -84,8 +88,17 @@ void MachinesSidebar::applyFilter()
         if (!needle.isEmpty() && !r.hostname.toLower().contains(needle))
             continue;
 
-        const QString dot = r.status == "online" ? "🟢" : (r.status == "critical" ? "🔴" : "⚪");
-        auto* item = new QListWidgetItem(dot + " " + r.hostname);
+        const QColor statusColor = r.status == "online" ? QColor("#38b26c")
+            : (r.status == "critical" ? QColor("#df5260") : QColor("#87919c"));
+        QPixmap statusPixmap(12, 12);
+        statusPixmap.fill(Qt::transparent);
+        QPainter painter(&statusPixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(statusColor);
+        painter.drawEllipse(1, 1, 10, 10);
+
+        auto* item = new QListWidgetItem(QIcon(statusPixmap), r.hostname);
         item->setData(Qt::UserRole, r.deviceId);
         list_->addItem(item);
     }

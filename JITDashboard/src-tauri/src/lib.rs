@@ -4,8 +4,33 @@ use serde::Serialize;
 use std::{
     env,
     path::{Path, PathBuf},
+    process::{Child, Command},
+    sync::Mutex,
     time::Duration,
 };
+use tauri::Manager;
+
+struct GoBackend(Mutex<Option<Child>>);
+
+fn start_go_backend() -> Result<Option<Child>, Box<dyn std::error::Error>> {
+    let executable = env::current_exe()?;
+    let Some(app_dir) = executable.parent() else {
+        return Ok(None);
+    };
+    let backend = app_dir.join("dashboard-go").join("dashboard.exe");
+    if !backend.is_file() {
+        return Ok(None);
+    }
+
+    let mut command = Command::new(backend);
+    command.arg("--headless");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    Ok(Some(command.spawn()?))
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -227,6 +252,24 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![get_local_dashboard_data])
+        .setup(|app| {
+            app.manage(GoBackend(Mutex::new(start_go_backend()?)));
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let Ok(mut backend) = window.state::<GoBackend>().0.lock() {
+                    if let Some(mut child) = backend.take() {
+                        if let Err(error) = child.kill() {
+                            eprintln!("Could not stop the Go dashboard backend: {error}");
+                        }
+                        if let Err(error) = child.wait() {
+                            eprintln!("Could not wait for the Go dashboard backend: {error}");
+                        }
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

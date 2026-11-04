@@ -4,6 +4,9 @@
 # JustInTime.exe thành .exe riêng để build/chạy/debug độc lập không cần
 # đụng tới agent - xem README.md mục "Vì sao tách".
 add_executable(JustInTimeDashboard WIN32
+        ../../resources/app_icon.qrc
+        ../../resources/app_icon.rc
+
         src/main.cpp
 
         include/dashconfig.h

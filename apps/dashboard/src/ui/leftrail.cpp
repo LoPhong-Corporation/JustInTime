@@ -2,6 +2,7 @@
 
 #include <QButtonGroup>
 #include <QPushButton>
+#include <QStyle>
 #include <QVBoxLayout>
 
 namespace jit::dash::ui {
@@ -20,7 +21,8 @@ LeftRail::LeftRail(QWidget* parent) : QWidget(parent)
 
     layout_->addStretch(); // nút section được chèn TRƯỚC stretch này (xem addSection)
 
-    settingsBtn_ = new QPushButton("⚙");
+    settingsBtn_ = new QPushButton;
+    settingsBtn_->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
     settingsBtn_->setObjectName("railButton");
     settingsBtn_->setFixedSize(44, 44);
     settingsBtn_->setToolTip("Settings");
@@ -28,7 +30,8 @@ LeftRail::LeftRail(QWidget* parent) : QWidget(parent)
     connect(settingsBtn_, &QPushButton::clicked, this, [this] { if (onSettingsClicked) onSettingsClicked(); });
     layout_->addWidget(settingsBtn_);
 
-    accountBtn_ = new QPushButton("👤");
+    accountBtn_ = new QPushButton;
+    accountBtn_->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
     accountBtn_->setObjectName("railAccountButton");
     accountBtn_->setFixedSize(44, 44);
     accountBtn_->setToolTip("Account");
@@ -37,9 +40,10 @@ LeftRail::LeftRail(QWidget* parent) : QWidget(parent)
     layout_->addWidget(accountBtn_);
 }
 
-int LeftRail::addSection(const QString& glyph, const QString& tooltip)
+int LeftRail::addSection(const QIcon& icon, const QString& tooltip)
 {
-    auto* btn = new QPushButton(glyph);
+    auto* btn = new QPushButton;
+    btn->setIcon(icon);
     btn->setObjectName("railButton");
     btn->setFixedSize(44, 44);
     btn->setCheckable(true);
@@ -80,9 +84,9 @@ void LeftRail::setCurrentIndex(int index)
     buttons_[static_cast<size_t>(index)]->setChecked(true);
 }
 
-void LeftRail::setAccountGlyph(const QString& glyph, const QString& tooltip)
+void LeftRail::setAccountGlyph(const QString& label, const QString& tooltip)
 {
-    accountBtn_->setText(glyph);
+    accountBtn_->setText(label);
     accountBtn_->setToolTip(tooltip);
 }
 

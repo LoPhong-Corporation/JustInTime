@@ -5,13 +5,13 @@
 // bar), theo đúng wireframe người dùng cung cấp:
 //
 //   ┌───┬──────────┬──────────────────────────────┬──────────┐
-//   │ 🏠│ [filter] │ Overview │ CPU │ RAM │ ...     │ Alerts   │
-//   │ 🔍│ ○ MachA  │ ──────────────────────────────│ ...      │
-//   │ 🔔│ ○ MachB  │   (nội dung tab đang chọn)     │ Snapshot │
-//   │ 📄│ ○ MachC  │                                │ [box]    │
+//   │Home│ [filter] │ Overview │ CPU │ RAM │ ...     │ Alerts   │
+//   │Act.│ ○ MachA  │ ──────────────────────────────│ ...      │
+//   │Dev.│ ○ MachB  │   (nội dung tab đang chọn)     │ Snapshot │
+//   │Fam.│ ○ MachC  │                                │ [box]    │
 //   │   │          │                                │ Procs    │
 //   │ ⚙ │          │                                │ ...      │
-//   │ 👤│          │                                │          │
+//   │Acct│         │                                │          │
 //   ├───┴──────────┴──────────────────────────────┴──────────┤
 //   │ bottom bar (QStatusBar - kế thừa từ QMainWindow)         │
 //   └───────────────────────────────────────────────────────┘
@@ -19,13 +19,12 @@
 // 5 icon rail ánh xạ 9 trang cũ thành 4 khu vực nội dung (mỗi khu vực = 1
 // hoặc nhiều tab trong centerTabs_) + 2 nút không phải khu vực nội dung
 // (Settings mở dialog, Account bật/tắt đăng nhập):
-//   🏠 Home     -> Overview, CPU, RAM, Disk, Network  (giám sát hệ thống)
-//   🔍 Activity -> Local Activity, Cloud Data          (tra cứu lịch sử)
-//   🔔 Devices  -> Devices                             (nhắn tin thiết bị)
-//   📄 Family   -> Family                               (quản lý gia đình)
+//   Home     -> Overview, CPU, RAM, Disk, Network  (giám sát hệ thống)
+//   Activity -> Local Activity, Cloud Data          (tra cứu lịch sử)
+//   Devices  -> Devices                             (nhắn tin thiết bị)
+//   Family   -> Family                               (quản lý gia đình)
 //
-// Glyph dùng ký tự Unicode/emoji thay vì file .ico/.svg - không cần thêm
-// resource/asset nào, vẫn hiện đúng trên Windows (Segoe UI Emoji có sẵn).
+// Rail uses native Qt standard icons to avoid font-dependent emoji glyphs.
 //
 #include "ui/mainwindow.h"
 #include "ui/asyncutil.h"
@@ -47,6 +46,7 @@
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
@@ -58,7 +58,7 @@ namespace jit::dash::ui {
 MainWindow::MainWindow(Config cfg, std::unique_ptr<LocalDB> db)
     : cfg_(std::move(cfg)), db_(std::move(db))
 {
-    setWindowTitle("JustInTime Dashboard");
+    setWindowTitle("JustInTime - Thời Gian Máy");
     resize(1280, 800);
     buildUi();
 
@@ -107,10 +107,10 @@ void MainWindow::buildUi()
 
     // ---------------------------------------------------------- Left rail --
     rail_ = new LeftRail;
-    rail_->addSection("🏠", "Home - system monitoring");
-    rail_->addSection("🔍", "Activity - local & cloud history");
-    rail_->addSection("🔔", "Devices - messages between your machines");
-    rail_->addSection("📄", "Family - parental controls");
+    rail_->addSection(style()->standardIcon(QStyle::SP_DesktopIcon), "Home - system monitoring");
+    rail_->addSection(style()->standardIcon(QStyle::SP_FileDialogContentsView), "Activity - local & cloud history");
+    rail_->addSection(style()->standardIcon(QStyle::SP_MessageBoxInformation), "Devices - messages between your machines");
+    rail_->addSection(style()->standardIcon(QStyle::SP_DirHomeIcon), "Family - parental controls");
     rail_->onSectionSelected = [this](int index) { showSection(index); };
     rail_->onSettingsClicked = [this] { openSettings(); };
     rail_->onAccountClicked = [this] { onAccountClicked(); };
@@ -207,7 +207,7 @@ void MainWindow::updateAccountGlyph()
     }
     else
     {
-        rail_->setAccountGlyph("👤", "Not logged in (click to log in)");
+        rail_->setAccountGlyph(QString(), "Not logged in (click to log in)");
     }
 }
 

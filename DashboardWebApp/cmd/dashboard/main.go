@@ -22,6 +22,7 @@ import (
 
 func main() {
 	trayFlag := flag.Bool("tray", false, "show the tray icon (used automatically when launched at login)")
+	headlessFlag := flag.Bool("headless", false, "serve the dashboard API without opening a browser or tray icon")
 	portFlag := flag.Int("port", 0, "override the local dashboard port")
 	flag.Parse()
 
@@ -37,6 +38,9 @@ func main() {
 		// Most likely another instance of the dashboard is already
 		// running on this port — just surface it instead of failing.
 		log.Printf("dashboard already running (or port %d busy): %v", cfg.Port, err)
+		if *headlessFlag {
+			return
+		}
 		if *trayFlag && runtime.GOOS == "windows" {
 			tray.Run(url)
 		} else {
@@ -67,7 +71,9 @@ func main() {
 	// JustInTime tray menu (no --tray), it just serves + opens the
 	// browser and exits its own foreground wait once the browser has
 	// what it needs — no second tray icon.
-	if *trayFlag && runtime.GOOS == "windows" {
+	if *headlessFlag {
+		select {}
+	} else if *trayFlag && runtime.GOOS == "windows" {
 		tray.Run(url)
 	} else {
 		openBrowser(url)

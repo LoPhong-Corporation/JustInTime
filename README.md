@@ -76,9 +76,9 @@ The project follows an **offline-first** architecture, ensuring that activity da
 
 # Project Structure
 
-This is a monorepo with **two separate executables** that share one small
-common library - they are built, versioned, and can be worked on
-independently of each other:
+The native agent and Qt Dashboard build as **two separate executables**
+that share one small common library. The repository also contains the Go
+API and a React/Tauri desktop dashboard:
 
 ```text
 JustInTime/
@@ -106,11 +106,10 @@ JustInTime/
 ├── third_party/         sqlite3 (used by libs/common), nothing else
 │                          shared - apps/dashboard/third_party/ has its
 │                          own nlohmann/json (only it needs JSON parsing).
-│
-└── dashboard-go/        Original Go implementation of the dashboard -
-                          kept for historical reference only. Not part of
-                          the CMake build anymore; superseded by
-                          apps/dashboard (C++/Qt6).
+├── DashboardWebApp/     Go API and local web dashboard used by the
+│                          React/Tauri dashboard for account-backed features.
+└── JITDashboard/        React/Tauri desktop dashboard; it starts the Go
+                           backend sidecar when installed.
 ```
 
 ### Why two executables instead of one
@@ -201,8 +200,6 @@ If the network is unavailable, records remain safely stored in SQLite and will b
 - Supabase Edge Functions
 - PostgreSQL
 - CMake
-- Python 3.13
-- Flask
 - Go
 
 ---
@@ -216,9 +213,9 @@ Requirements
 - CMake
 
 ```bash
-git clone https://github.com/LoPhong-Corporation/JustInTime-CLIENT.git
+git clone https://github.com/LoPhong-Corporation/JustInTime.git
 
-cd JustInTime-CLIENT
+cd JustInTime
 
 mkdir build
 
@@ -235,6 +232,22 @@ This produces **both** executables (`JustInTime.exe` and
 pass `--target JustInTime` or `--target JustInTimeDashboard` to the build
 command.
 
+
+# Building the Windows installer
+
+The Inno Setup script is `installer/JustInTime.iss`. Install CMake, Go,
+Node.js/npm, Rust/Cargo, Inno Setup 6, and the Qt 6.11.2 MSVC 2022 x64
+kit used by the current CMake configuration. Run `installer\build.cmd`
+from an x64 Visual Studio Developer Command Prompt. It builds and
+deploys the Qt applications, builds the Go sidecar and Tauri dashboard,
+then writes
+`installer\dist\JustInTime-Setup-1.0.2.1.exe`.
+
+The installer creates shortcuts for the agent, React/Tauri dashboard,
+and native Qt dashboard. The Go backend is installed under
+`dashboard-go\dashboard.exe` beside the Tauri app. User data under
+`%APPDATA%\JustInTime` is retained when uninstalling. Windows must have
+the Microsoft Edge WebView2 runtime for the Tauri dashboard.
 
 # Documentation
 

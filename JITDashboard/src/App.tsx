@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import appLogo from "../src-tauri/icons/icon.png";
 import "./App.css";
 
 type View = "home" | "apps" | "history" | "cloud" | "insights" | "limits" | "devices" | "parental" | "settings";
@@ -225,6 +227,7 @@ function App() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [oauthPending, setOAuthPending] = useState(false);
   const [limitProcessName, setLimitProcessName] = useState("");
   const [limitMinutes, setLimitMinutes] = useState("");
   const [limitBlocked, setLimitBlocked] = useState(false);
@@ -240,19 +243,58 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    goApi<GoAuth>("/api/auth/status")
-      .then((status) => {
+    let attempts = 0;
+    let retryTimer: number | undefined;
+    const loadAuthStatus = async () => {
+      try {
+        const status = await goApi<GoAuth>("/api/auth/status");
         if (!active) return;
         setGoAuth(status);
         setGoBackendError(null);
-      })
-      .catch((error: unknown) => {
+      } catch (error) {
         if (!active) return;
+        if (isTauriRuntime && attempts < 20) {
+          attempts += 1;
+          retryTimer = window.setTimeout(() => void loadAuthStatus(), 250);
+          return;
+        }
         setGoBackendError(String(error));
         setGoAuth(null);
-      });
-    return () => { active = false; };
+      }
+    };
+    void loadAuthStatus();
+    return () => {
+      active = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
   }, [refreshToken]);
+
+  useEffect(() => {
+    if (!oauthPending) return;
+    let active = true;
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      goApi<GoAuth>("/api/auth/status").then((status) => {
+        if (!active) return;
+        if (status.logged_in) {
+          setGoAuth(status);
+          setGoBackendError(null);
+          setOAuthPending(false);
+        } else if (attempts >= 90) {
+          setOAuthPending(false);
+        }
+      }).catch((error: unknown) => {
+        if (!active) return;
+        setOAuthPending(false);
+        setApiError(String(error));
+      });
+    }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [oauthPending]);
 
   useEffect(() => {
     let active = true;
@@ -478,6 +520,21 @@ function App() {
       setApiError(String(error));
     }
   };
+  const startOAuthLogin = async (provider: "google" | "azure") => {
+    setApiError(null);
+    setOAuthPending(true);
+    try {
+      const url = `${GO_API_BASE}/auth/oauth/start?provider=${provider}`;
+      if (isTauriRuntime) {
+        await openUrl(url);
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      setOAuthPending(false);
+      setApiError(String(error));
+    }
+  };
   const generateInsights = async () => {
     setAiLoading(true);
     setApiError(null);
@@ -639,7 +696,7 @@ function App() {
     <div className="app-window">
       <div className="app-body">
         <aside className="sidebar">
-          <div className="sidebar-brand"><span className="brand-mark" /><div><strong>Thời Gian Máy</strong><small>Quản lý thời gian sử dụng</small></div></div>
+          <div className="sidebar-brand"><img className="brand-mark" src={appLogo} alt="" /><div><strong>JustInTime</strong><small>Thời Gian Máy</small></div></div>
           <nav className="navigation" aria-label="Điều hướng chính">
             {navigation.map((item) => (
               <button
@@ -677,7 +734,7 @@ function App() {
 
           {dataError && <div className="data-notice error" role="alert">Không thể đọc dữ liệu từ backend: {dataError}</div>}
           {!isTauriRuntime && ["home", "apps", "history"].includes(view) && <div className="data-notice" role="status">Dữ liệu thiết bị cục bộ chỉ khả dụng khi chạy trong ứng dụng Tauri.</div>}
-          {goBackendError && ["cloud", "insights", "devices", "parental", "limits", "settings"].includes(view) && <div className="data-notice error" role="alert">Không kết nối được Go backend tại {GO_API_BASE}: {goBackendError}. Hãy khởi chạy Dashboard Go rồi thử làm mới.</div>}
+          {goBackendError && ["cloud", "insights", "devices", "parental", "limits", "settings"].includes(view) && <div className="data-notice error" role="alert">Không kết nối được Go backend tại {GO_API_BASE}: {goBackendError}. {isTauriRuntime ? "Hãy khởi động lại ứng dụng desktop rồi thử lại." : "Hãy khởi chạy Dashboard Go rồi thử làm mới."}</div>}
           {goAuth?.logged_in === false && ["cloud", "devices", "parental", "limits"].includes(view) && <div className="data-notice" role="status">Đăng nhập tài khoản trong <button type="button" className="text-button" onClick={() => setView("settings")}>Cài đặt</button> để sử dụng các tính năng này.</div>}
           {apiError && <div className="data-notice error" role="alert">{apiError}</div>}
           {apiLoading && <div className="data-notice" role="status">Đang tải dữ liệu từ Go backend…</div>}
@@ -923,6 +980,8 @@ function App() {
                   <label>Mật khẩu<input type="password" autoComplete="current-password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} /></label>
                   <button type="submit" className="button primary" disabled={loginLoading || !loginEmail || !loginPassword}>{loginLoading ? "Đang đăng nhập…" : "Đăng nhập"}</button>
                 </form>}
+                {!goAuth?.logged_in && <div className="oauth-actions"><button type="button" className="button" disabled={oauthPending} onClick={() => startOAuthLogin("google")}>Tiếp tục với Google</button><button type="button" className="button" disabled={oauthPending} onClick={() => startOAuthLogin("azure")}>Tiếp tục với Microsoft</button></div>}
+                {oauthPending && <p className="sub account-help" role="status">Hoàn tất đăng nhập trong cửa sổ trình duyệt vừa mở; dashboard sẽ tự cập nhật.</p>}
                 <p className="sub account-help">Cài Gemini API key tại <a href={`${GO_API_BASE}/settings`} target="_blank" rel="noreferrer">Settings của Go dashboard</a>. AI Insights chỉ gửi dữ liệu khi bạn yêu cầu.</p>
               </section>
             </article>
